@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AF Simulator</title>
+<style>
+:root {
+  --bg: #f3f4f7; --panel: #ffffff; --ink: #1b2230; --muted: #5d6878; --line: #d8dde6; --soft: #eef1f5;
+  --accent: #c2313d; --accent-ink: #ffffff; --view: #131a26; --view-ink: #d7deea; --view-dim: #7f8ba0;
+  --ecg: #6fe08a; --uni: #ffc35c; --bip: #6cc9ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0d1119; --panel: #171d29; --ink: #e4e9f2; --muted: #96a2b5; --line: #2a3344; --soft: #1f2735; --accent: #e25563; }
+}
+:root[data-theme="dark"] { --bg: #0d1119; --panel: #171d29; --ink: #e4e9f2; --muted: #96a2b5; --line: #2a3344; --soft: #1f2735; --accent: #e25563; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: grid; grid-template-rows: auto 1fr; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+h1 span { color: var(--muted); font-weight: 400; }
+.scenarios { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+button { font: inherit; color: var(--ink); background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.warn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 0; }
+.stage { display: grid; grid-template-rows: auto minmax(0, 1fr) 210px; min-height: 0; background: var(--view); color: var(--view-ink); }
+#hint { padding: 7px 16px; font-size: 13px; color: var(--view-ink); border-bottom: 1px solid #263044; min-height: 34px; }
+.view { position: relative; min-height: 240px; overflow: hidden; }
+.view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#gl { touch-action: none; cursor: grab; }
+#ov { pointer-events: none; }
+.hud { position: absolute; left: 12px; top: 10px; font-size: 12px; color: var(--view-dim); pointer-events: none; font-variant-numeric: tabular-nums; }
+.hud b { color: var(--view-ink); font-weight: 600; }
+.views { position: absolute; right: 10px; top: 10px; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.views button, .tools button { background: #1e2737; color: var(--view-ink); border-color: #33405a; padding: 3px 8px; font-size: 12px; }
+.views button:hover, .tools button:hover { border-color: #6b7c9c; }
+.tools { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 4px; flex-wrap: wrap; }
+.tools button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.legend { position: absolute; right: 12px; bottom: 12px; font-size: 11px; color: var(--view-dim); text-align: right; pointer-events: none; }
+.legend i { display: block; width: 150px; height: 8px; border-radius: 4px; margin: 3px 0 0 auto; }
+.strips { position: relative; border-top: 1px solid #263044; }
+.strips canvas { width: 100%; height: 100%; display: block; }
+.strips .read { position: absolute; right: 12px; top: 6px; font-size: 12px; color: var(--view-dim); font-variant-numeric: tabular-nums; }
+.strips .read b { color: var(--view-ink); }
+aside { background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; border-radius: 0; background: none; padding: 10px 4px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); background: none; font-weight: 600; }
+.pane { display: none; padding: 14px 16px 20px; overflow-y: auto; }
+.pane.on { display: block; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+h2:first-child { margin-top: 0; }
+label.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 9px 0; }
+label.row input[type=range] { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: var(--accent); }
+label.row output { color: var(--muted); font-variant-numeric: tabular-nums; }
+label.chk { display: flex; gap: 8px; align-items: center; margin: 7px 0; }
+label.chk input { accent-color: var(--accent); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.note { color: var(--muted); font-size: 12.5px; margin: 6px 0; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
+.stats div { background: var(--soft); border-radius: 6px; padding: 7px 8px; }
+.stats small { display: block; color: var(--muted); font-size: 11px; }
+.stats b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.wl { position: relative; height: 10px; background: var(--soft); border-radius: 5px; margin: 10px 0 4px; }
+.wl i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 5px; }
+.wl u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+select { font: inherit; color: var(--ink); background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+details { margin-top: 16px; color: var(--muted); font-size: 12.5px; }
+details summary { cursor: pointer; color: var(--ink); }
+@media (max-width: 900px) {
+  body { display: block; height: auto; }
+  main { display: block; }
+  .stage { grid-template-rows: auto 62vh 190px; }
+  .legend { display: none; }
+  .views { top: auto; bottom: 44px; left: 10px; right: auto; justify-content: flex-start; }
+  .strips .read { top: auto; bottom: 4px; }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
+  .pane { overflow: visible; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>AF Simulator <span>· left atrium</span></h1>
+  <div class="scenarios" id="scenarios">
+    <button data-s="sinus">Sinus rhythm</button>
+    <button data-s="trigger">PV trigger → AF</button>
+    <button data-s="rotor">Single rotor</button>
+    <button data-s="wavelets">Multi-wavelet AF</button>
+    <button data-s="pvi">After PVI</button>
+    <button data-s="gap">PVI with a gap</button>
+  </div>
+</header>
+<main>
+  <section class="stage">
+    <div id="hint"></div>
+    <div class="view" id="view">
+      <canvas id="gl"></canvas><canvas id="ov"></canvas>
+      <div class="hud" id="hud"></div>
+      <div class="views" id="views">
+        <button data-v="PA">PA</button><button data-v="AP">AP</button><button data-v="LAO">LAO</button>
+        <button data-v="RAO">RAO</button><button data-v="LL">Left lateral</button><button data-v="ROOF">Superior</button>
+      </div>
+      <div class="tools" id="tools">
+        <button data-t="rotate" title="Drag to rotate, scroll to zoom">Rotate</button>
+        <button data-t="pace" title="Click the surface to deliver a paced beat">Pace</button>
+        <button data-t="catheter" title="Click the surface to move the mapping catheter">Catheter</button>
+        <button data-t="ablate" title="Drag on the surface to create lesions">Ablate</button>
+        <button data-t="rotor" title="Click the surface to seed a spiral wave">Seed rotor</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="strips">
+      <canvas id="strips"></canvas>
+      <div class="read" id="read"></div>
+    </div>
+  </section>
+  <aside>
+    <div class="tabs" id="tabs">
+      <button data-p="rhythm">Rhythm</button><button data-p="substrate">Substrate</button>
+      <button data-p="therapy">Therapy</button><button data-p="display">Display</button>
+    </div>
+    <div>
+      <div class="pane" id="p-rhythm">
+        <h2>Playback</h2>
+        <div class="btns"><button id="play">Pause</button><button id="step">Step 10 ms</button><button id="rest">Reset to rest</button></div>
+        <label class="row">Speed (tissue ms per second)<output id="o-speed"></output><input type="range" id="speed" min="20" max="400" step="10" value="120"></label>
+        <h2>Sinus drive</h2>
+        <label class="chk"><input type="checkbox" id="sinusOn"> Sinus beats enter at Bachmann's bundle</label>
+        <label class="row">Sinus cycle length<output id="o-sinusCL"></output><input type="range" id="sinusCL" min="300" max="1200" step="10"></label>
+        <h2>Pulmonary vein ectopy</h2>
+        <div class="btns" id="pvs"></div>
+        <label class="row">Coupling interval (single beat)<output id="o-ci"></output><input type="range" id="ci" min="80" max="400" step="5" value="180"></label>
+        <label class="row">Burst cycle length<output id="o-bcl"></output><input type="range" id="bcl" min="70" max="250" step="5" value="120"></label>
+        <label class="row">Burst beats<output id="o-bn"></output><input type="range" id="bn" min="3" max="30" step="1" value="12"></label>
+        <div class="btns"><button id="pvc">Premature beat</button><button id="burst">Burst</button></div>
+        <p class="note">Use the Pace tool to stimulate anywhere on the surface. A beat that lands on the tail of the previous wave can block in one direction and start re-entry.</p>
+      </div>
+      <div class="pane" id="p-substrate">
+        <h2>Tissue properties</h2>
+        <div class="stats">
+          <div><small>Conduction</small><b id="s-cv">–</b></div>
+          <div><small>APD</small><b id="s-apd">–</b></div>
+          <div><small>Wavelength</small><b id="s-wl">–</b></div>
+        </div>
+        <div class="wl"><i id="wl-bar"></i><u id="wl-mark"></u></div>
+        <p class="note">Wavelength = conduction velocity × action potential duration, measured at 400 ms pacing. The mark is the distance around the atrium (about 15 cm). Re-entry needs the wavelength to fit.</p>
+        <h2>Substrate</h2>
+        <label class="row">Electrical remodelling<output id="o-remodel"></output><input type="range" id="remodel" min="0" max="1" step="0.05"></label>
+        <p class="note">Shortens the action potential and slows conduction.</p>
+        <label class="row">Repolarisation heterogeneity<output id="o-dispersion"></output><input type="range" id="dispersion" min="0" max="0.6" step="0.05"></label>
+        <label class="row">Fibrosis (share of surface)<output id="o-fibrosis"></output><input type="range" id="fibrosis" min="0" max="0.4" step="0.02"></label>
+        <div class="btns"><button id="reseed">New fibrosis pattern</button></div>
+        <p class="note">Pulmonary vein sleeves always have a shorter action potential and slightly slower conduction than the atrial body.</p>
+      </div>
+      <div class="pane" id="p-therapy">
+        <h2>Ablation</h2>
+        <div class="btns" id="lesions">
+          <button data-l="pviLeft">Left PVI</button><button data-l="pviRight">Right PVI</button>
+          <button data-l="roof">Roof line</button><button data-l="floor">Inferior line</button>
+          <button data-l="mitral">Mitral isthmus line</button><button data-l="box">Posterior box</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="gap"> Leave a gap in the next lesion set</label>
+        <label class="row">Brush width<output id="o-brush"></output><input type="range" id="brush" min="3" max="10" step="0.5" value="5"></label>
+        <div class="btns"><button id="undo">Undo</button><button id="clear">Clear all lesions</button></div>
+        <p class="note">Pick the Ablate tool under the atrium, then drag on the surface. Hold Shift to rotate while ablating.</p>
+        <h2>Antiarrhythmic drugs</h2>
+        <label class="row">Class I (sodium channel block)<output id="o-naBlock"></output><input type="range" id="naBlock" min="0" max="1" step="0.05"></label>
+        <label class="row">Class III (action potential prolongation)<output id="o-kBlock"></output><input type="range" id="kBlock" min="0" max="1" step="0.05"></label>
+        <h2>Cardioversion</h2>
+        <div class="btns"><button id="shock" class="warn">Deliver shock</button></div>
+        <p class="note">Depolarises all tissue at once. Sinus rhythm resumes if the sinus drive is on.</p>
+      </div>
+      <div class="pane" id="p-display">
+        <h2>Map</h2>
+        <div class="btns" id="modes"><button data-m="0">Voltage</button><button data-m="1">Phase</button><button data-m="2">Activation time</button></div>
+        <label class="chk"><input type="checkbox" id="showPS" checked> Mark rotor cores (phase singularities)</label>
+        <label class="chk"><input type="checkbox" id="showLabels" checked> Anatomical labels</label>
+        <label class="chk"><input type="checkbox" id="showFib" checked> Show fibrosis</label>
+        <h2>Signals</h2>
+        <label class="chk"><input type="checkbox" id="qrs"> Add ventricular complexes to the far-field lead</label>
+        <h2>Mesh</h2>
+        <label>Resolution <select id="freq"><option value="32">Coarse (fastest)</option><option value="48" selected>Standard</option><option value="64">Fine (needs a fast machine)</option></select></label>
+        <p class="note">Changing resolution restarts the simulation. The scenarios are tuned on Standard.</p>
+        <details>
+          <summary>About this model</summary>
+          <p>A monodomain simulation with the Fenton-Karma three-variable cell model runs on the surface of a stylised left atrium with four pulmonary veins, the appendage and the mitral annulus. Fibrillation is not scripted: it arises from the tissue properties you set.</p>
+          <p>It is a teaching model. The wall has no thickness or fibre direction, there is no right atrium, the upstroke is broader than in real tissue, and the ventricular complexes are a template driven by a simple AV node rule. Numbers are indicative, not patient-specific.</p>
+        </details>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script id="sim-core">
+/*__SIM_CORE__*/
+</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const HINTS = {
+  sinus: "Sinus rhythm in a healthy atrium: each beat enters at Bachmann's bundle and crosses the atrium in about 100 ms. Fire a PV burst from the Rhythm tab: it conducts but cannot sustain.",
+  trigger: 'Remodelled, mildly fibrotic atrium. After two sinus beats, a burst from the LSPV breaks up into fibrillation. Try a shock or class I drug under Therapy.',
+  rotor: 'One spiral wave seeded on the posterior wall of a remodelled atrium. Switch to Phase under Display to follow its core; it can drift and anchor to a vein or the annulus.',
+  wavelets: 'Short wavelength plus strong repolarisation heterogeneity: rotors form, break up and collide continuously. Move the catheter to compare electrograms between sites.',
+  pvi: 'Same atrium and same LSPV burst, with both vein pairs encircled. The vein fires but the atrial body stays in sinus rhythm.',
+  gap: 'The left circle has a gap on its posterior side, so the burst escapes into the atrium. Close the gap with the Ablate tool, then fire the burst again from the Rhythm tab.',
+};
+const TOOL_HINTS = {
+  rotate: 'Drag to rotate, scroll to zoom.',
+  pace: 'Click the surface to deliver a paced beat there.',
+  catheter: 'Click the surface to move the mapping catheter; its electrograms are shown below.',
+  ablate: 'Drag on the surface to create lesions. Hold Shift to rotate.',
+  rotor: 'Click the surface to seed a spiral wave with its tip at that point.',
+};
+
+// ---------- state ----------
+let mesh = null, params = {}, mode = 0, tool = 'rotate', running = true, speed = 120, owed = 0, pending = false;
+let ps = [], waves = 0, catheter = null, simT = 0, lesions = 0, achieved = 0, stepExtra = 0, pv = 0;
+const N_SIG = 8192, WINDOW = 3000;
+const sig = { ecg: new Float32Array(N_SIG), uni: new Float32Array(N_SIG), bip: new Float32Array(N_SIG), w: 0, count: 0 };
+const cam = { yaw: Math.PI, pitch: 0.17, dist: 118, target: [0, 1, -2], fov: 34 * Math.PI / 180 };
+
+// ---------- simulation host (worker, or main thread if workers are unavailable) ----------
+const coreSrc = $('sim-core').textContent;
+let send = null, worker = null, gotMesh = false;
+function mainThreadHost() {
+  const handle = AFSim.createHost(m => setTimeout(() => onMsg(m), 0), 11);
+  return m => handle(m);
+}
+function startHost() {
+  const init = () => send({ type: 'init', freq: +$('freq').value });
+  const fallBack = () => { if (gotMesh || !worker) return; worker.terminate(); worker = null; send = mainThreadHost(); init(); cmd('preset', { name: start }); };
+  try {
+    if (new URLSearchParams(location.search).get('worker') === '0') throw new Error('worker disabled');
+    worker = new Worker(URL.createObjectURL(new Blob([coreSrc], { type: 'text/javascript' })));
+    worker.onmessage = e => onMsg(e.data);
+    worker.onerror = fallBack;
+    send = m => worker.postMessage(m);
+    setTimeout(fallBack, 4000); // a worker that never answers is treated as unavailable
+  } catch (e) { worker = null; send = mainThreadHost(); }
+  init();
+}
+const cmd = (name, args) => send({ type: 'cmd', name, args });
+
+function onMsg(m) {
+  if (m.type === 'mesh') { gotMesh = true; mesh = m; uploadMesh(); pending = false; sig.count = 0; return; }
+  if (m.type === 'params') { params = m.params; syncControls(); return; }
+  if (m.type !== 'frame') return;
+  pending = false; simT = m.t; ps = m.ps; waves = m.waves; catheter = m.catheter; lesions = m.lesions;
+  if (m.val.length !== mesh.n) return;
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf.val); gl.bufferSubData(gl.ARRAY_BUFFER, 0, m.val);
+  if (m.flags) { gl.bindBuffer(gl.ARRAY_BUFFER, buf.flag); gl.bufferSubData(gl.ARRAY_BUFFER, 0, m.flags); }
+  for (let i = 0; i < m.ecg.length; i++) {
+    sig.ecg[sig.w] = m.ecg[i]; sig.uni[sig.w] = m.uni[i]; sig.bip[sig.w] = m.bip[i];
+    sig.w = (sig.w + 1) % N_SIG; sig.count++;
+  }
+  const nowT = performance.now(); achieved += (m.done * 1000 / Math.max(4, nowT - lastMsgT) - achieved) * 0.1; lastMsgT = nowT; shownMode = m.mode;
+  if (m.measure) showMeasure(m.measure);
+  lastCL = m.cl;
+}
+let lastCL = 0, frameDt = 16, lastMsgT = performance.now(), shownMode = 0;
+
+// ---------- WebGL ----------
+const glc = $('gl'), gl = glc.getContext('webgl2', { antialias: true, alpha: true });
+const ov = $('ov'), octx = ov.getContext('2d');
+const buf = {};
+let prog, uni = {}, vao;
+function shader(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function initGL() {
+  const vs = `#version 300 es
+in vec3 aPos; in vec3 aNrm; in float aVal; in float aFlag;
+uniform mat4 uMVP; out vec3 vPos; out vec3 vNrm; out float vVal; out float vFlag;
+void main() { vPos = aPos; vNrm = aNrm; vVal = aVal; vFlag = aFlag; gl_Position = uMVP * vec4(aPos, 1.0); }`;
+  const fs = `#version 300 es
+precision highp float;
+in vec3 vPos; in vec3 vNrm; in float vVal; in float vFlag;
+uniform int uMode; uniform vec3 uEye; uniform float uFib; out vec4 o;
+vec3 hue(float h) { return clamp(abs(fract(h + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); }
+void main() {
+  vec3 c;
+  if (uMode == 0) {
+    float u = clamp(vVal, 0.0, 1.0);
+    vec3 rest = vec3(0.30, 0.20, 0.28), mid = vec3(0.93, 0.38, 0.12), hot = vec3(1.0, 0.93, 0.62);
+    c = u < 0.5 ? mix(rest, mid, u * 2.0) : mix(mid, hot, (u - 0.5) * 2.0);
+  } else if (uMode == 1) c = hue(vVal) * 0.9 + 0.05;
+  else c = vVal > 240.0 ? vec3(0.33, 0.30, 0.37) : hue(clamp(vVal / 240.0, 0.0, 1.0) * 0.78);
+  vec3 grey = vec3(0.62, 0.62, 0.58);
+  if (vFlag > 2.5) c = vec3(0.17, 0.03, 0.05);
+  else if (vFlag > 1.5) c = mix(c, grey, uFib);
+  else if (vFlag > 0.5) c = mix(c, grey, 0.3 * uFib);
+  float d = abs(dot(normalize(vNrm), normalize(uEye - vPos)));
+  o = vec4(c * (gl_FrontFacing ? 0.32 + 0.68 * d : 0.16 + 0.30 * d), 1.0);
+}`;
+  prog = gl.createProgram();
+  gl.attachShader(prog, shader(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, fs));
+  ['aPos', 'aNrm', 'aVal', 'aFlag'].forEach((a, i) => gl.bindAttribLocation(prog, i, a));
+  gl.linkProgram(prog);
+  for (const u of ['uMVP', 'uMode', 'uEye', 'uFib']) uni[u] = gl.getUniformLocation(prog, u);
+  gl.enable(gl.DEPTH_TEST);
+}
+function uploadMesh() {
+  if (vao) { gl.deleteVertexArray(vao); Object.values(buf).forEach(b => gl.deleteBuffer(b)); }
+  vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const attr = (name, loc, data, size, type, usage) => {
+    buf[name] = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf[name]); gl.bufferData(gl.ARRAY_BUFFER, data, usage);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, type, false, 0, 0);
+  };
+  attr('pos', 0, mesh.pos, 3, gl.FLOAT, gl.STATIC_DRAW);
+  attr('nrm', 1, mesh.nrm, 3, gl.FLOAT, gl.STATIC_DRAW);
+  attr('val', 2, new Float32Array(mesh.n), 1, gl.FLOAT, gl.DYNAMIC_DRAW);
+  attr('flag', 3, new Uint8Array(mesh.n), 1, gl.UNSIGNED_BYTE, gl.DYNAMIC_DRAW);
+  buf.idx = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.idx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.idx, gl.STATIC_DRAW);
+}
+
+// ---------- camera maths ----------
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+let view = { eye: [0, 0, 1], f: [0, 0, -1], r: [1, 0, 0], u: [0, 1, 0], mvp: new Float32Array(16), w: 1, h: 1 };
+function updateCamera() {
+  const dist = cam.dist * Math.max(1, 1.2 * glc.clientHeight / glc.clientWidth); // keep the atrium in frame on tall screens
+  const cp = Math.cos(cam.pitch), eye = [cam.target[0] + dist * cp * Math.sin(cam.yaw), cam.target[1] + dist * Math.sin(cam.pitch), cam.target[2] + dist * cp * Math.cos(cam.yaw)];
+  const f = norm(sub(cam.target, eye)), r = norm(cross(f, [0, 1, 0])), u = cross(r, f);
+  const w = glc.clientWidth, h = glc.clientHeight, t = 1 / Math.tan(cam.fov / 2), a = w / h, near = 10, far = 900;
+  const V = [r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0, -dot(r, eye), -dot(u, eye), dot(f, eye), 1];
+  const P = [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0];
+  const m = view.mvp;
+  for (let c = 0; c < 4; c++) for (let rw = 0; rw < 4; rw++) { let s = 0; for (let k = 0; k < 4; k++) s += P[k * 4 + rw] * V[c * 4 + k]; m[c * 4 + rw] = s; }
+  Object.assign(view, { eye, f, r, u, w, h });
+}
+function project(p) {
+  const m = view.mvp, x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+  return [(x / w * 0.5 + 0.5) * view.w, (0.5 - y / w * 0.5) * view.h];
+}
+// nearest surface hit under a pixel: {p, n} or null
+function pick(px, py) {
+  if (!mesh) return null;
+  const th = Math.tan(cam.fov / 2), nx = (2 * px / view.w - 1) * th * view.w / view.h, ny = (1 - 2 * py / view.h) * th;
+  const d = norm([view.f[0] + nx * view.r[0] + ny * view.u[0], view.f[1] + nx * view.r[1] + ny * view.u[1], view.f[2] + nx * view.r[2] + ny * view.u[2]]);
+  const o = view.eye, P = mesh.pos, I = mesh.idx;
+  let best = Infinity, bn = null;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = 3 * I[t], b = 3 * I[t + 1], c = 3 * I[t + 2];
+    const e1x = P[b] - P[a], e1y = P[b + 1] - P[a + 1], e1z = P[b + 2] - P[a + 2], e2x = P[c] - P[a], e2y = P[c + 1] - P[a + 1], e2z = P[c + 2] - P[a + 2];
+    const px_ = d[1] * e2z - d[2] * e2y, py_ = d[2] * e2x - d[0] * e2z, pz_ = d[0] * e2y - d[1] * e2x;
+    const det = e1x * px_ + e1y * py_ + e1z * pz_;
+    if (det > -1e-9 && det < 1e-9) continue;
+    const inv = 1 / det, tx = o[0] - P[a], ty = o[1] - P[a + 1], tz = o[2] - P[a + 2];
+    const u = (tx * px_ + ty * py_ + tz * pz_) * inv; if (u < 0 || u > 1) continue;
+    const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+    const v = (d[0] * qx + d[1] * qy + d[2] * qz) * inv; if (v < 0 || u + v > 1) continue;
+    const dist = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    if (dist > 0 && dist < best) { best = dist; bn = [e1y * e2z - e1z * e2y, e1z * e2x - e1x * e2z, e1x * e2y - e1y * e2x]; }
+  }
+  if (!bn) return null;
+  let n = norm(bn); if (dot(n, d) > 0) n = [-n[0], -n[1], -n[2]];
+  return { p: [o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best], n };
+}
+
+// ---------- drawing ----------
+function resize(c) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return dpr;
+}
+const facing = (p, n) => dot(n, norm(sub(view.eye, p)));
+function draw() {
+  resize(glc); const dpr = resize(ov);
+  updateCamera();
+  gl.viewport(0, 0, glc.width, glc.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, view.w, view.h);
+  if (!mesh) return;
+  gl.useProgram(prog); gl.bindVertexArray(vao);
+  gl.uniformMatrix4fv(uni.uMVP, false, view.mvp); gl.uniform1i(uni.uMode, shownMode); gl.uniform3fv(uni.uEye, view.eye);
+  gl.uniform1f(uni.uFib, $('showFib').checked ? 1 : 0);
+  gl.drawElements(gl.TRIANGLES, mesh.idx.length, gl.UNSIGNED_INT, 0);
+
+  octx.font = '12px system-ui, sans-serif'; octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  if ($('showLabels').checked) for (const l of mesh.labels) {
+    const fc = facing(l.pos, l.dir); if (fc < 0.1) continue;
+    const s = project(l.pos); octx.globalAlpha = Math.min(1, fc * 2.5);
+    octx.lineWidth = 3; octx.strokeStyle = 'rgba(10,14,22,.75)'; octx.strokeText(l.name, s[0], s[1]);
+    octx.fillStyle = '#e8edf6'; octx.fillText(l.name, s[0], s[1]);
+  }
+  octx.globalAlpha = 1;
+  if ($('showPS').checked) for (const q of ps) {
+    const p = [q[0], q[1], q[2]]; if (facing(p, norm(p)) < 0.05) continue;
+    const s = project(p);
+    octx.beginPath(); octx.arc(s[0], s[1], 8, 0, 6.2832); octx.lineWidth = 2.5; octx.strokeStyle = q[3] > 0 ? '#ffffff' : '#111827'; octx.stroke();
+    octx.beginPath(); octx.arc(s[0], s[1], 3, 0, 6.2832); octx.fillStyle = q[3] > 0 ? '#111827' : '#ffffff'; octx.fill();
+  }
+  if (catheter) {
+    const vis = facing(catheter.pos, catheter.nrm) > 0, a = project(catheter.e1), b = project(catheter.e2);
+    const tip = project([catheter.pos[0] + catheter.nrm[0] * 14, catheter.pos[1] + catheter.nrm[1] * 14, catheter.pos[2] + catheter.nrm[2] * 14]);
+    octx.globalAlpha = vis ? 1 : 0.3; octx.strokeStyle = '#6cc9ff'; octx.lineWidth = 2;
+    octx.beginPath(); octx.moveTo(tip[0], tip[1]); octx.lineTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); octx.stroke();
+    for (const e of [a, b]) { octx.beginPath(); octx.arc(e[0], e[1], 3.5, 0, 6.2832); octx.fillStyle = '#6cc9ff'; octx.fill(); octx.lineWidth = 1; octx.strokeStyle = '#0b1220'; octx.stroke(); }
+    octx.globalAlpha = 1;
+  }
+}
+
+const sc = $('strips'), sctx = sc.getContext('2d');
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function drawStrips() {
+  const dpr = resize(sc), w = sc.clientWidth, h = sc.clientHeight;
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0); sctx.clearRect(0, 0, w, h);
+  const lanes = [['Far-field lead (pseudo-ECG)', sig.ecg, css('--ecg'), 1.25, 0.72], ['Catheter unipolar (auto gain)', sig.uni, css('--uni'), 0, 0.5], ['Catheter bipolar (auto gain)', sig.bip, css('--bip'), 0, 0.5]];
+  const lh = h / lanes.length, x0 = 0, n = Math.min(sig.count, WINDOW);
+  // time grid: scrolls with the trace, 200 ms minor and 1 s major
+  const tEnd = simT;
+  for (let k = Math.ceil((tEnd - WINDOW) / 200); k * 200 <= tEnd; k++) {
+    const x = x0 + (k * 200 - (tEnd - WINDOW)) / WINDOW * w;
+    sctx.strokeStyle = k % 5 === 0 ? 'rgba(140,155,180,.28)' : 'rgba(140,155,180,.10)'; sctx.lineWidth = 1;
+    sctx.beginPath(); sctx.moveTo(x, 0); sctx.lineTo(x, h); sctx.stroke();
+  }
+  sctx.font = '11px system-ui, sans-serif'; sctx.textBaseline = 'top';
+  lanes.forEach(([name, data, color, range, base], li) => {
+    if (!range) { range = 0.25; for (let i = 0; i < n; i++) range = Math.max(range, Math.abs(data[(sig.w - n + i + N_SIG) % N_SIG]) * 1.1); }
+    const y0 = li * lh, mid = y0 + lh * base, scale = lh * 0.46 / range;
+    sctx.save(); sctx.beginPath(); sctx.rect(0, y0, w, lh); sctx.clip();
+    sctx.strokeStyle = color; sctx.lineWidth = 1.3; sctx.lineJoin = 'round'; sctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const v = data[(sig.w - n + i + N_SIG) % N_SIG], x = w - (n - 1 - i) / WINDOW * w, y = mid - v * scale;
+      if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+    }
+    sctx.stroke(); sctx.restore();
+    sctx.fillStyle = color; sctx.fillText(name, 10, y0 + 5);
+    if (li) { sctx.strokeStyle = 'rgba(140,155,180,.18)'; sctx.beginPath(); sctx.moveTo(0, y0); sctx.lineTo(w, y0); sctx.stroke(); }
+  });
+}
+
+// dominant frequency of the unipolar electrogram (Hann-windowed DFT, 2-15 Hz)
+let df = 0, dfAt = 0;
+function updateDF(now) {
+  if (now - dfAt < 500) return; dfAt = now;
+  const n = Math.min(sig.count, 4096); if (n < 1500) { df = 0; return; }
+  let mean = 0; const x = new Float32Array(n);
+  for (let i = 0; i < n; i++) { x[i] = sig.uni[(sig.w - n + i + N_SIG) % N_SIG]; mean += x[i]; }
+  mean /= n; let power = 0;
+  for (let i = 0; i < n; i++) { x[i] = (x[i] - mean) * (0.5 - 0.5 * Math.cos(6.2832 * i / (n - 1))); power += x[i] * x[i]; }
+  if (power / n < 1e-5) { df = 0; return; }
+  let best = 0, bf = 0;
+  for (let f = 2; f <= 15; f += 0.2) {
+    let re = 0, im = 0; const w = 6.2832 * f / 1000;
+    for (let i = 0; i < n; i += 2) { re += x[i] * Math.cos(w * i); im += x[i] * Math.sin(w * i); }
+    const p = re * re + im * im; if (p > best) { best = p; bf = f; }
+  }
+  df = bf;
+}
+
+function showMeasure(m) {
+  const ok = m.cv > 0 && m.apd > 0;
+  $('s-cv').textContent = m.cv > 0 ? Math.round(m.cv * 100) + ' cm/s' : 'block';
+  $('s-apd').textContent = m.apd > 0 ? Math.round(m.apd) + ' ms' : '–';
+  $('s-wl').textContent = ok ? (m.wavelength / 10).toFixed(1) + ' cm' : '–';
+  $('wl-bar').style.width = (ok ? Math.min(100, m.wavelength / 200 * 100) : 0) + '%';
+  $('wl-mark').style.left = '75%';
+}
+
+// ---------- main loop ----------
+let lastFrame = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  frameDt = Math.min(now - lastFrame, 100); lastFrame = now;
+  if (mesh && !pending) {
+    owed = Math.min(owed + (running ? speed * frameDt / 1000 : 0) + stepExtra, 60); stepExtra = 0;
+    pending = true; send({ type: 'tick', ms: owed, mode }); owed -= Math.floor(owed);
+  } else if (running) owed = Math.min(owed + speed * frameDt / 1000, 60);
+  draw(); drawStrips(); updateDF(now);
+  $('hud').innerHTML = mesh
+    ? `Tissue time <b>${(simT / 1000).toFixed(2)} s</b> · running at <b>${Math.round(achieved / 5) * 5}</b> ms/s<br>Rotor cores <b>${ps.length}</b> · wavefronts <b>${waves}</b> · lesion points <b>${lesions}</b>`
+    : 'Building the atrium…';
+  $('read').innerHTML = `Catheter cycle length <b>${lastCL > 0 ? Math.round(lastCL) + ' ms' : '–'}</b> · dominant frequency <b>${df && lastCL > 0 && lastCL < 400 ? df.toFixed(1) + ' Hz' : '–'}</b>`;
+}
+
+// ---------- controls ----------
+const pct = v => Math.round(v * 100) + '%';
+const SLIDERS = { sinusCL: v => v + ' ms', remodel: pct, dispersion: pct, fibrosis: pct, naBlock: pct, kBlock: pct };
+const LOCAL = { speed: v => v + ' ms/s', ci: v => v + ' ms', bcl: v => v + ' ms', bn: v => v, brush: v => (+v).toFixed(1) + ' mm' };
+function syncControls() {
+  for (const k in SLIDERS) { $(k).value = params[k]; $('o-' + k).textContent = SLIDERS[k](+params[k]); }
+  $('sinusOn').checked = params.sinusOn; $('qrs').checked = params.qrs;
+}
+function setGroup(id, attr, val) { for (const b of $(id).children) b.classList.toggle('on', b.dataset[attr] === String(val)); }
+function setHint(text) { $('hint').textContent = text; }
+function setLegend() {
+  const g = ['linear-gradient(90deg,#4d3347,#ed611f,#ffed9e)', 'linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta,red)', 'linear-gradient(90deg,red,yellow,lime,cyan,blue,#a000ff)'][mode];
+  const t = ['Resting → depolarised', 'Phase of the action potential', 'Activated now → 240 ms ago'][mode];
+  $('legend').innerHTML = `${t}<i style="background:${g}"></i>`;
+}
+function bind() {
+  for (const k in SLIDERS) $(k).addEventListener('input', e => { params[k] = +e.target.value; $('o-' + k).textContent = SLIDERS[k](params[k]); cmd('params', { values: { [k]: params[k] } }); });
+  for (const k in LOCAL) { const f = () => { $('o-' + k).textContent = LOCAL[k]($(k).value); }; $(k).addEventListener('input', f); f(); }
+  $('speed').addEventListener('input', e => { speed = +e.target.value; });
+  for (const k of ['sinusOn', 'qrs']) $(k).addEventListener('change', e => cmd('params', { values: { [k]: e.target.checked } }));
+  $('scenarios').addEventListener('click', e => { const s = e.target.dataset.s; if (!s) return; cmd('preset', { name: s }); setGroup('scenarios', 's', s); setHint(HINTS[s]); sig.count = 0; running = true; $('play').textContent = 'Pause'; });
+  $('tabs').addEventListener('click', e => { const p = e.target.dataset.p; if (!p) return; setGroup('tabs', 'p', p); for (const el of document.querySelectorAll('.pane')) el.classList.toggle('on', el.id === 'p-' + p); });
+  $('tools').addEventListener('click', e => { const t = e.target.dataset.t; if (!t) return; tool = t; setGroup('tools', 't', t); setHint(TOOL_HINTS[t]); glc.style.cursor = t === 'rotate' ? 'grab' : 'crosshair'; });
+  $('modes').addEventListener('click', e => { if (e.target.dataset.m === undefined) return; mode = +e.target.dataset.m; setGroup('modes', 'm', mode); setLegend(); });
+  $('views').addEventListener('click', e => {
+    const v = { PA: [Math.PI, 0.17], AP: [0, 0.1], LAO: [0.79, 0.1], RAO: [-0.52, 0.1], LL: [1.57, 0.1], ROOF: [Math.PI, 1.45] }[e.target.dataset.v];
+    if (v) { cam.yaw = v[0]; cam.pitch = v[1]; }
+  });
+  $('play').addEventListener('click', () => { running = !running; $('play').textContent = running ? 'Pause' : 'Play'; });
+  $('step').addEventListener('click', () => { running = false; $('play').textContent = 'Play'; stepExtra = 10; });
+  $('rest').addEventListener('click', () => { cmd('rest'); sig.count = 0; });
+  $('pvc').addEventListener('click', () => cmd('premature', { pv, ci: +$('ci').value }));
+  $('burst').addEventListener('click', () => cmd('ectopy', { pv, count: +$('bn').value, cl: +$('bcl').value }));
+  $('reseed').addEventListener('click', () => cmd('reseed'));
+  $('lesions').addEventListener('click', e => { const l = e.target.dataset.l; if (l) { cmd('lesion', { name: l, gap: $('gap').checked }); $('gap').checked = false; } });
+  $('undo').addEventListener('click', () => cmd('undo'));
+  $('clear').addEventListener('click', () => cmd('clear'));
+  $('shock').addEventListener('click', () => cmd('shock'));
+  $('freq').addEventListener('change', () => { mesh = null; ps = []; catheter = null; send({ type: 'init', freq: +$('freq').value }); setGroup('scenarios', 's', ''); });
+  ['LSPV', 'LIPV', 'RSPV', 'RIPV'].forEach((name, i) => {
+    const b = document.createElement('button'); b.textContent = name; b.dataset.i = i; b.classList.toggle('on', i === 0);
+    b.addEventListener('click', () => { pv = i; setGroup('pvs', 'i', i); }); $('pvs').appendChild(b);
+  });
+
+  // pointer: drag rotates; a click (or an ablation drag) uses the current tool
+  let drag = null;
+  const at = e => { const r = glc.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  glc.addEventListener('pointerdown', e => {
+    glc.setPointerCapture(e.pointerId);
+    const [x, y] = at(e), hit = tool === 'rotate' ? null : pick(x, y);
+    drag = { x, y, moved: 0, paint: tool === 'ablate' && hit && !e.shiftKey };
+    if (drag.paint) cmd('ablateStroke', { p: hit.p, r: +$('brush').value / 2, fresh: true });
+  });
+  glc.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const [x, y] = at(e), dx = x - drag.x, dy = y - drag.y;
+    drag.moved += Math.abs(dx) + Math.abs(dy); drag.x = x; drag.y = y;
+    if (drag.paint) { const hit = pick(x, y); if (hit) cmd('ablateStroke', { p: hit.p, r: +$('brush').value / 2, fresh: false }); return; }
+    cam.yaw -= dx * 0.008; cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + dy * 0.008));
+  });
+  glc.addEventListener('pointerup', e => {
+    if (drag && !drag.paint && drag.moved < 5 && tool !== 'rotate') {
+      const hit = pick(drag.x, drag.y);
+      if (hit && tool === 'pace') cmd('pace', { p: hit.p });
+      if (hit && tool === 'catheter') cmd('catheter', { p: hit.p, n: hit.n });
+      if (hit && tool === 'rotor') cmd('rotor', { p: hit.p });
+    }
+    drag = null;
+  });
+  glc.addEventListener('pointercancel', () => { drag = null; });
+  glc.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.max(70, Math.min(320, cam.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+}
+
+// ---------- start ----------
+if (!gl) { $('hint').textContent = 'This page needs WebGL2, which this browser does not provide.'; return; }
+initGL(); bind();
+setGroup('tabs', 'p', 'rhythm'); $('p-rhythm').classList.add('on');
+setGroup('tools', 't', 'rotate'); setGroup('modes', 'm', 0); setLegend();
+const start = new URLSearchParams(location.search).get('scenario') || 'trigger';
+startHost();
+cmd('preset', { name: start }); setGroup('scenarios', 's', start); setHint(HINTS[start] || '');
+{ const warm = +new URLSearchParams(location.search).get('warm'); if (warm > 0) cmd('warm', { ms: Math.min(warm, 20000) }); }
+window.__af = { get state() { return { simT, ps: ps.length, waves, lesions, achieved, worker: !!worker, n: mesh && mesh.n, cl: lastCL, df }; }, cmd, cam, setMode: m => { mode = m; setGroup('modes', 'm', m); setLegend(); } };
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AF Simulator</title>
+<style>
+:root {
+  --bg: #f3f4f7; --panel: #ffffff; --ink: #1b2230; --muted: #5d6878; --line: #d8dde6; --soft: #eef1f5;
+  --accent: #c2313d; --accent-ink: #ffffff; --view: #131a26; --view-ink: #d7deea; --view-dim: #7f8ba0;
+  --ecg: #6fe08a; --uni: #ffc35c; --bip: #6cc9ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0d1119; --panel: #171d29; --ink: #e4e9f2; --muted: #96a2b5; --line: #2a3344; --soft: #1f2735; --accent: #e25563; }
+}
+:root[data-theme="dark"] { --bg: #0d1119; --panel: #171d29; --ink: #e4e9f2; --muted: #96a2b5; --line: #2a3344; --soft: #1f2735; --accent: #e25563; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: grid; grid-template-rows: auto 1fr; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+h1 span { color: var(--muted); font-weight: 400; }
+.scenarios { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+button { font: inherit; color: var(--ink); background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.warn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 0; }
+.stage { display: grid; grid-template-rows: auto minmax(0, 1fr) 210px; min-height: 0; background: var(--view); color: var(--view-ink); }
+#hint { padding: 7px 16px; font-size: 13px; color: var(--view-ink); border-bottom: 1px solid #263044; min-height: 34px; }
+.view { position: relative; min-height: 240px; overflow: hidden; }
+.view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#gl { touch-action: none; cursor: grab; }
+#ov { pointer-events: none; }
+.hud { position: absolute; left: 12px; top: 10px; font-size: 12px; color: var(--view-dim); pointer-events: none; font-variant-numeric: tabular-nums; }
+.hud b { color: var(--view-ink); font-weight: 600; }
+.views { position: absolute; right: 10px; top: 10px; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.views button, .tools button { background: #1e2737; color: var(--view-ink); border-color: #33405a; padding: 3px 8px; font-size: 12px; }
+.views button:hover, .tools button:hover { border-color: #6b7c9c; }
+.tools { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 4px; flex-wrap: wrap; }
+.tools button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.legend { position: absolute; right: 12px; bottom: 12px; font-size: 11px; color: var(--view-dim); text-align: right; pointer-events: none; }
+.legend i { display: block; width: 150px; height: 8px; border-radius: 4px; margin: 3px 0 0 auto; }
+.strips { position: relative; border-top: 1px solid #263044; }
+.strips canvas { width: 100%; height: 100%; display: block; }
+.strips .read { position: absolute; right: 12px; top: 6px; font-size: 12px; color: var(--view-dim); font-variant-numeric: tabular-nums; }
+.strips .read b { color: var(--view-ink); }
+aside { background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; border-radius: 0; background: none; padding: 10px 4px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); background: none; font-weight: 600; }
+.pane { display: none; padding: 14px 16px 20px; overflow-y: auto; }
+.pane.on { display: block; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+h2:first-child { margin-top: 0; }
+label.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 9px 0; }
+label.row input[type=range] { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: var(--accent); }
+label.row output { color: var(--muted); font-variant-numeric: tabular-nums; }
+label.chk { display: flex; gap: 8px; align-items: center; margin: 7px 0; }
+label.chk input { accent-color: var(--accent); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.note { color: var(--muted); font-size: 12.5px; margin: 6px 0; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
+.stats div { background: var(--soft); border-radius: 6px; padding: 7px 8px; }
+.stats small { display: block; color: var(--muted); font-size: 11px; }
+.stats b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.wl { position: relative; height: 10px; background: var(--soft); border-radius: 5px; margin: 10px 0 4px; }
+.wl i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 5px; }
+.wl u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+select { font: inherit; color: var(--ink); background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+details { margin-top: 16px; color: var(--muted); font-size: 12.5px; }
+details summary { cursor: pointer; color: var(--ink); }
+@media (max-width: 900px) {
+  body { display: block; height: auto; }
+  main { display: block; }
+  .stage { grid-template-rows: auto 62vh 190px; }
+  .legend { display: none; }
+  .views { top: auto; bottom: 44px; left: 10px; right: auto; justify-content: flex-start; }
+  .strips .read { top: auto; bottom: 4px; }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
+  .pane { overflow: visible; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>AF Simulator <span>· left atrium</span></h1>
+  <div class="scenarios" id="scenarios">
+    <button data-s="sinus">Sinus rhythm</button>
+    <button data-s="trigger">PV trigger → AF</button>
+    <button data-s="rotor">Single rotor</button>
+    <button data-s="wavelets">Multi-wavelet AF</button>
+    <button data-s="pvi">After PVI</button>
+    <button data-s="gap">PVI with a gap</button>
+  </div>
+</header>
+<main>
+  <section class="stage">
+    <div id="hint"></div>
+    <div class="view" id="view">
+      <canvas id="gl"></canvas><canvas id="ov"></canvas>
+      <div class="hud" id="hud"></div>
+      <div class="views" id="views">
+        <button data-v="PA">PA</button><button data-v="AP">AP</button><button data-v="LAO">LAO</button>
+        <button data-v="RAO">RAO</button><button data-v="LL">Left lateral</button><button data-v="ROOF">Superior</button>
+      </div>
+      <div class="tools" id="tools">
+        <button data-t="rotate" title="Drag to rotate, scroll to zoom">Rotate</button>
+        <button data-t="pace" title="Click the surface to deliver a paced beat">Pace</button>
+        <button data-t="catheter" title="Click the surface to move the mapping catheter">Catheter</button>
+        <button data-t="ablate" title="Drag on the surface to create lesions">Ablate</button>
+        <button data-t="rotor" title="Click the surface to seed a spiral wave">Seed rotor</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="strips">
+      <canvas id="strips"></canvas>
+      <div class="read" id="read"></div>
+    </div>
+  </section>
+  <aside>
+    <div class="tabs" id="tabs">
+      <button data-p="rhythm">Rhythm</button><button data-p="substrate">Substrate</button>
+      <button data-p="therapy">Therapy</button><button data-p="display">Display</button>
+    </div>
+    <div>
+      <div class="pane" id="p-rhythm">
+        <h2>Playback</h2>
+        <div class="btns"><button id="play">Pause</button><button id="step">Step 10 ms</button><button id="rest">Reset to rest</button></div>
+        <label class="row">Speed (tissue ms per second)<output id="o-speed"></output><input type="range" id="speed" min="20" max="400" step="10" value="120"></label>
+        <h2>Sinus drive</h2>
+        <label class="chk"><input type="checkbox" id="sinusOn"> Sinus beats enter at Bachmann's bundle</label>
+        <label class="row">Sinus cycle length<output id="o-sinusCL"></output><input type="range" id="sinusCL" min="300" max="1200" step="10"></label>
+        <h2>Pulmonary vein ectopy</h2>
+        <div class="btns" id="pvs"></div>
+        <label class="row">Coupling interval (single beat)<output id="o-ci"></output><input type="range" id="ci" min="80" max="400" step="5" value="180"></label>
+        <label class="row">Burst cycle length<output id="o-bcl"></output><input type="range" id="bcl" min="70" max="250" step="5" value="120"></label>
+        <label class="row">Burst beats<output id="o-bn"></output><input type="range" id="bn" min="3" max="30" step="1" value="12"></label>
+        <div class="btns"><button id="pvc">Premature beat</button><button id="burst">Burst</button></div>
+        <p class="note">Use the Pace tool to stimulate anywhere on the surface. A beat that lands on the tail of the previous wave can block in one direction and start re-entry.</p>
+      </div>
+      <div class="pane" id="p-substrate">
+        <h2>Tissue properties</h2>
+        <div class="stats">
+          <div><small>Conduction</small><b id="s-cv">–</b></div>
+          <div><small>APD</small><b id="s-apd">–</b></div>
+          <div><small>Wavelength</small><b id="s-wl">–</b></div>
+        </div>
+        <div class="wl"><i id="wl-bar"></i><u id="wl-mark"></u></div>
+        <p class="note">Wavelength = conduction velocity × action potential duration, measured at 400 ms pacing. The mark is the distance around the atrium (about 15 cm). Re-entry needs the wavelength to fit.</p>
+        <h2>Substrate</h2>
+        <label class="row">Electrical remodelling<output id="o-remodel"></output><input type="range" id="remodel" min="0" max="1" step="0.05"></label>
+        <p class="note">Shortens the action potential and slows conduction.</p>
+        <label class="row">Repolarisation heterogeneity<output id="o-dispersion"></output><input type="range" id="dispersion" min="0" max="0.6" step="0.05"></label>
+        <label class="row">Fibrosis (share of surface)<output id="o-fibrosis"></output><input type="range" id="fibrosis" min="0" max="0.4" step="0.02"></label>
+        <div class="btns"><button id="reseed">New fibrosis pattern</button></div>
+        <p class="note">Pulmonary vein sleeves always have a shorter action potential and slightly slower conduction than the atrial body.</p>
+      </div>
+      <div class="pane" id="p-therapy">
+        <h2>Ablation</h2>
+        <div class="btns" id="lesions">
+          <button data-l="pviLeft">Left PVI</button><button data-l="pviRight">Right PVI</button>
+          <button data-l="roof">Roof line</button><button data-l="floor">Inferior line</button>
+          <button data-l="mitral">Mitral isthmus line</button><button data-l="box">Posterior box</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="gap"> Leave a gap in the next lesion set</label>
+        <label class="row">Brush width<output id="o-brush"></output><input type="range" id="brush" min="3" max="10" step="0.5" value="5"></label>
+        <div class="btns"><button id="undo">Undo</button><button id="clear">Clear all lesions</button></div>
+        <p class="note">Pick the Ablate tool under the atrium, then drag on the surface. Hold Shift to rotate while ablating.</p>
+        <h2>Antiarrhythmic drugs</h2>
+        <label class="row">Class I (sodium channel block)<output id="o-naBlock"></output><input type="range" id="naBlock" min="0" max="1" step="0.05"></label>
+        <label class="row">Class III (action potential prolongation)<output id="o-kBlock"></output><input type="range" id="kBlock" min="0" max="1" step="0.05"></label>
+        <h2>Cardioversion</h2>
+        <div class="btns"><button id="shock" class="warn">Deliver shock</button></div>
+        <p class="note">Depolarises all tissue at once. Sinus rhythm resumes if the sinus drive is on.</p>
+      </div>
+      <div class="pane" id="p-display">
+        <h2>Map</h2>
+        <div class="btns" id="modes"><button data-m="0">Voltage</button><button data-m="1">Phase</button><button data-m="2">Activation time</button></div>
+        <label class="chk"><input type="checkbox" id="showPS" checked> Mark rotor cores (phase singularities)</label>
+        <label class="chk"><input type="checkbox" id="showLabels" checked> Anatomical labels</label>
+        <label class="chk"><input type="checkbox" id="showFib" checked> Show fibrosis</label>
+        <h2>Signals</h2>
+        <label class="chk"><input type="checkbox" id="qrs"> Add ventricular complexes to the far-field lead</label>
+        <h2>Mesh</h2>
+        <label>Resolution <select id="freq"><option value="32">Coarse (fastest)</option><option value="48" selected>Standard</option><option value="64">Fine (needs a fast machine)</option></select></label>
+        <p class="note">Changing resolution restarts the simulation. The scenarios are tuned on Standard.</p>
+        <details>
+          <summary>About this model</summary>
+          <p>A monodomain simulation with the Fenton-Karma three-variable cell model runs on the surface of a stylised left atrium with four pulmonary veins, the appendage and the mitral annulus. Fibrillation is not scripted: it arises from the tissue properties you set.</p>
+          <p>It is a teaching model. The wall has no thickness or fibre direction, there is no right atrium, the upstroke is broader than in real tissue, and the ventricular complexes are a template driven by a simple AV node rule. Numbers are indicative, not patient-specific.</p>
+        </details>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script id="sim-core">
+// AF simulator core: left atrial surface mesh + monodomain Fenton-Karma model.
+// Pure JS, no DOM. Runs in a Web Worker, on the main thread (fallback) or under Node (tests).
+const AFSim = (() => {
+'use strict';
+
+// ---------- small helpers ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const norm3 = v => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const smooth = x => { x = clamp(x, 0, 1); return x * x * x * (x * (6 * x - 15) + 10); };
+
+// ---------- anatomy (mm; x = patient left, y = superior, z = anterior) ----------
+const ANAT = {
+  semi: [27, 25, 21],
+  pv: { H: 11, tin: 0.18, tout: 0.40, hole: 0.155 },
+  pvs: [
+    { name: 'LSPV', axis: norm3([0.74, 0.42, -0.52]) },
+    { name: 'LIPV', axis: norm3([0.74, -0.40, -0.54]) },
+    { name: 'RSPV', axis: norm3([-0.72, 0.44, -0.54]) },
+    { name: 'RIPV', axis: norm3([-0.72, -0.40, -0.56]) },
+  ],
+  laa: { name: 'LAA', axis: norm3([0.70, 0.30, 0.65]), H: 13, tin: 0.10, tout: 0.40 },
+  mv: { name: 'Mitral annulus', axis: norm3([0.28, -0.62, 0.73]), hole: 0.52 },
+  bachmann: norm3([-0.45, 0.55, 0.70]),
+  avn: norm3([-0.55, -0.45, 0.50]),
+  R: 24, // nominal radius used to convert angles to mm
+};
+
+function radiusAt(d) {
+  const s = ANAT.semi;
+  let r = 1 / Math.sqrt((d[0] / s[0]) ** 2 + (d[1] / s[1]) ** 2 + (d[2] / s[2]) ** 2);
+  for (const p of ANAT.pvs) {
+    const th = Math.acos(clamp(dot3(d, p.axis), -1, 1));
+    r += ANAT.pv.H * (1 - smooth((th - ANAT.pv.tin) / (ANAT.pv.tout - ANAT.pv.tin)));
+  }
+  const th = Math.acos(clamp(dot3(d, ANAT.laa.axis), -1, 1));
+  r += ANAT.laa.H * (1 - smooth((th - ANAT.laa.tin) / (ANAT.laa.tout - ANAT.laa.tin)));
+  return r;
+}
+
+// ---------- mesh ----------
+// Geodesic sphere; freq (edge subdivisions of the icosahedron) must be 2^k or 3 * 2^k.
+function icosphere(freq) {
+  let level = 0, three = freq % 3 === 0;
+  for (let f = three ? freq / 3 : freq; f > 1; f >>= 1) level++;
+  const t = (1 + Math.sqrt(5)) / 2;
+  let verts = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t],
+    [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(norm3);
+  let tris = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+    3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1];
+  if (three) {
+    const cache = new Map(), next = [];
+    const third = (a, b) => { // point one third of the way from a to b
+      const key = a * 1048576 + b;
+      let m = cache.get(key);
+      if (m === undefined) {
+        const A = verts[a], B = verts[b];
+        m = verts.length; verts.push(norm3([2 * A[0] + B[0], 2 * A[1] + B[1], 2 * A[2] + B[2]]));
+        cache.set(key, m);
+      }
+      return m;
+    };
+    for (let i = 0; i < tris.length; i += 3) {
+      const a = tris[i], b = tris[i + 1], c = tris[i + 2], A = verts[a], B = verts[b], C = verts[c];
+      const ab1 = third(a, b), ab2 = third(b, a), bc1 = third(b, c), bc2 = third(c, b), ca1 = third(c, a), ca2 = third(a, c);
+      const m = verts.length; verts.push(norm3([A[0] + B[0] + C[0], A[1] + B[1] + C[1], A[2] + B[2] + C[2]]));
+      next.push(a, ab1, ca2, ab1, ab2, m, ab1, m, ca2, ab2, b, bc1, ab2, bc1, m, bc1, bc2, m, bc2, c, ca1, bc2, ca1, m, ca1, ca2, m);
+    }
+    tris = next;
+  }
+  for (let l = 0; l < level; l++) {
+    const cache = new Map(), next = [];
+    const mid = (a, b) => {
+      const key = a < b ? a * 1048576 + b : b * 1048576 + a;
+      let m = cache.get(key);
+      if (m === undefined) {
+        const A = verts[a], B = verts[b];
+        m = verts.length; verts.push(norm3([A[0] + B[0], A[1] + B[1], A[2] + B[2]]));
+        cache.set(key, m);
+      }
+      return m;
+    };
+    for (let i = 0; i < tris.length; i += 3) {
+      const a = tris[i], b = tris[i + 1], c = tris[i + 2];
+      const ab = mid(a, b), bc = mid(b, c), ca = mid(c, a);
+      next.push(a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca);
+    }
+    tris = next;
+  }
+  return { verts, tris };
+}
+
+function buildMesh(freq) {
+  const ico = icosphere(freq);
+  const holes = ANAT.pvs.map(p => ({ axis: p.axis, cos: Math.cos(ANAT.pv.hole) }));
+  holes.push({ axis: ANAT.mv.axis, cos: Math.cos(ANAT.mv.hole) });
+  const inHole = d => holes.some(h => dot3(d, h.axis) > h.cos);
+
+  // drop triangles inside the PV ostia and mitral annulus, then compact the vertex list
+  const keepTri = [], remap = new Int32Array(ico.verts.length).fill(-1);
+  for (let i = 0; i < ico.tris.length; i += 3) {
+    const A = ico.verts[ico.tris[i]], B = ico.verts[ico.tris[i + 1]], C = ico.verts[ico.tris[i + 2]];
+    if (inHole(norm3([A[0] + B[0] + C[0], A[1] + B[1] + C[1], A[2] + B[2] + C[2]]))) continue;
+    keepTri.push(ico.tris[i], ico.tris[i + 1], ico.tris[i + 2]);
+  }
+  let n = 0;
+  for (const v of keepTri) if (remap[v] < 0) remap[v] = n++;
+  const dirs = new Float64Array(3 * n), pos = new Float32Array(3 * n);
+  for (let o = 0; o < remap.length; o++) {
+    const i = remap[o]; if (i < 0) continue;
+    const d = ico.verts[o], r = radiusAt(d);
+    dirs.set(d, 3 * i);
+    pos[3 * i] = d[0] * r; pos[3 * i + 1] = d[1] * r; pos[3 * i + 2] = d[2] * r;
+  }
+  const idx = new Uint32Array(keepTri.length);
+  for (let i = 0; i < idx.length; i++) idx[i] = remap[keepTri[i]];
+
+  // cotangent Laplacian, lumped areas, vertex normals
+  const area = new Float64Array(n), nrm = new Float32Array(3 * n), edge = new Map();
+  let edgeSum = 0, edgeCnt = 0;
+  const addEdge = (a, b, w) => {
+    const key = a < b ? a * 1048576 + b : b * 1048576 + a;
+    edge.set(key, (edge.get(key) || 0) + w);
+  };
+  for (let t = 0; t < idx.length; t += 3) {
+    const ia = idx[t], ib = idx[t + 1], ic = idx[t + 2];
+    const P = k => [pos[3 * k], pos[3 * k + 1], pos[3 * k + 2]];
+    const A = P(ia), B = P(ib), C = P(ic);
+    const ab = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], ac = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+    const bc = [C[0] - B[0], C[1] - B[1], C[2] - B[2]];
+    const nv = cross3(ab, ac), a2 = Math.hypot(nv[0], nv[1], nv[2]); // 2 * area
+    for (const k of [ia, ib, ic]) { area[k] += a2 / 6; nrm[3 * k] += nv[0]; nrm[3 * k + 1] += nv[1]; nrm[3 * k + 2] += nv[2]; }
+    // cot of the angle at each corner weights the opposite edge
+    addEdge(ib, ic, 0.5 * dot3(ab, ac) / a2);
+    addEdge(ia, ic, 0.5 * -dot3(ab, bc) / a2);
+    addEdge(ia, ib, 0.5 * dot3(ac, bc) / a2);
+    edgeSum += Math.hypot(...ab) + Math.hypot(...ac) + Math.hypot(...bc); edgeCnt += 3;
+  }
+  for (let i = 0; i < n; i++) {
+    const l = Math.hypot(nrm[3 * i], nrm[3 * i + 1], nrm[3 * i + 2]) || 1;
+    nrm[3 * i] /= l; nrm[3 * i + 1] /= l; nrm[3 * i + 2] /= l;
+  }
+  const deg = new Int32Array(n + 1);
+  for (const key of edge.keys()) { deg[Math.floor(key / 1048576) + 1]++; deg[key % 1048576 + 1]++; }
+  const rs = new Int32Array(n + 1);
+  for (let i = 0; i < n; i++) rs[i + 1] = rs[i] + deg[i + 1];
+  const col = new Int32Array(rs[n]), w0 = new Float64Array(rs[n]), fill = rs.slice(0, n);
+  for (const [key, wRaw] of edge) {
+    const a = Math.floor(key / 1048576), b = key % 1048576, w = Math.max(wRaw, 0.02);
+    col[fill[a]] = b; w0[fill[a]++] = w; col[fill[b]] = a; w0[fill[b]++] = w;
+  }
+
+  // per-vertex anatomy: PV sleeve weight (0..1), which PV, LAA weight
+  const sleeve = new Float32Array(n), pvId = new Int8Array(n).fill(-1), laa = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = [dirs[3 * i], dirs[3 * i + 1], dirs[3 * i + 2]];
+    ANAT.pvs.forEach((p, k) => {
+      const th = Math.acos(clamp(dot3(d, p.axis), -1, 1));
+      const s = 1 - smooth((th - ANAT.pv.tin) / (ANAT.pv.tout - ANAT.pv.tin));
+      if (s > sleeve[i]) { sleeve[i] = s; pvId[i] = k; }
+    });
+    const th = Math.acos(clamp(dot3(d, ANAT.laa.axis), -1, 1));
+    laa[i] = 1 - smooth((th - ANAT.laa.tin) / (ANAT.laa.tout - ANAT.laa.tin));
+  }
+
+  const labelAt = (name, axis, lift) => {
+    const r = radiusAt(axis) + lift;
+    return { name, pos: [axis[0] * r, axis[1] * r, axis[2] * r], dir: axis };
+  };
+  const labels = ANAT.pvs.map(p => labelAt(p.name, p.axis, 3));
+  labels.push(labelAt('LAA', ANAT.laa.axis, 3), labelAt('Mitral annulus', ANAT.mv.axis, -4),
+    labelAt('Posterior wall', norm3([0, 0, -1]), 2), labelAt('Roof', norm3([0, 1, -0.15]), 2),
+    labelAt('Septum', norm3([-1, -0.05, 0.25]), 2), labelAt("Bachmann's bundle", ANAT.bachmann, 2));
+
+  return { n, pos, nrm, idx, dirs, area, rs, col, w0, sleeve, pvId, laa, labels, meanEdge: edgeSum / edgeCnt };
+}
+
+// ---------- tissue (generic graph: the atrial mesh or a 1D cable) ----------
+// Fenton-Karma 3-variable model, atrial-like parameter set (times in ms).
+const FK = {
+  uc: 0.13, uv: 0.055, ucsi: 0.85, k: 10,
+  tvp: 7, tvLow: 19.6, tvMid: 1000, twp: 360, twm: 70, // tvp is scaled with mesh spacing
+  td: 0.27, t0: 8.3, tr: 50, tsi: 38,
+  D: 0.33, // mm^2/ms at the reference spacing
+};
+const ACT_THR = 0.5;
+// (1 + tanh(k (u - ucsi))) / 2 tabulated over u in [-0.25, 1.75)
+let sgTab = null, sgKey = '';
+function sigmoidTable() {
+  const key = FK.k + ':' + FK.ucsi;
+  if (key !== sgKey) {
+    sgTab = new Float64Array(1024); sgKey = key;
+    for (let i = 0; i < 1024; i++) sgTab[i] = 0.5 * (1 + Math.tanh(FK.k * ((i + 0.5) / 512 - 0.25 - FK.ucsi)));
+  }
+  return sgTab;
+}
+
+// Neighbours are stored padded to 6 per node (unused slots point at the node itself with weight 0)
+// so the diffusion gather can be unrolled; slot of CSR entry k in row i is 6*i + (k - rs[i]).
+function makeTissue(n, rs, col) {
+  const f = () => new Float64Array(n), nb = new Int32Array(6 * n);
+  for (let i = 0; i < n; i++) for (let s = 0; s < 6; s++) nb[6 * i + s] = rs[i] + s < rs[i + 1] ? col[rs[i] + s] : i;
+  return {
+    n, rs, col, nb, wgt: new Float64Array(6 * n), dead: new Uint8Array(n),
+    gfi: f(), iwp: f(), u: f(), v: f().fill(1), w: f().fill(1), diff: f(),
+    act: f().fill(-1e9), actPrev: f().fill(-1e9), t: 0, stims: [], itvp: 1 / FK.tvp,
+  };
+}
+
+function restTissue(T) {
+  T.u.fill(0); T.v.fill(1); T.w.fill(1); T.diff.fill(0);
+  T.act.fill(-1e9); T.actPrev.fill(-1e9); T.t = 0; T.stims.length = 0;
+}
+
+function stepTissue(T, dt, nSteps) {
+  const { n, nb, wgt, dead, gfi, iwp, u, v, w, diff, act, actPrev } = T;
+  const uc = FK.uc, uv = FK.uv, sg = sigmoidTable();
+  const itvp = T.itvp, itvLow = 1 / FK.tvLow, itvMid = 1 / FK.tvMid, itwm = 1 / FK.twm, it0 = 1 / FK.t0, itr = 1 / FK.tr, itsi = 1 / FK.tsi;
+  for (let s = 0; s < nSteps; s++) {
+    const t = T.t;
+    if (T.stims.length) {
+      for (let q = T.stims.length - 1; q >= 0; q--) {
+        const st = T.stims[q];
+        if (t >= st.until) { T.stims.splice(q, 1); continue; }
+        const nodes = st.nodes, a = st.amp * dt;
+        for (let j = 0; j < nodes.length; j++) { const i = nodes[j]; if (!dead[i] && u[i] < 1) u[i] += a; }
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      if (dead[i]) continue;
+      const ui = u[i], k = 6 * i;
+      diff[i] = wgt[k] * (u[nb[k]] - ui) + wgt[k + 1] * (u[nb[k + 1]] - ui) + wgt[k + 2] * (u[nb[k + 2]] - ui)
+        + wgt[k + 3] * (u[nb[k + 3]] - ui) + wgt[k + 4] * (u[nb[k + 4]] - ui) + wgt[k + 5] * (u[nb[k + 5]] - ui);
+    }
+    for (let i = 0; i < n; i++) {
+      if (dead[i]) continue;
+      const ui = u[i], vi = v[i], wi = w[i];
+      let cur, dv, dw;
+      if (ui >= uc) {
+        cur = itr - vi * (1 - ui) * (ui - uc) * gfi[i];
+        dv = -vi * itvp; dw = -wi * iwp[i];
+      } else {
+        cur = ui * it0;
+        dv = (1 - vi) * (ui >= uv ? itvMid : itvLow); dw = (1 - wi) * itwm;
+      }
+      const si = (ui + 0.25) * 512;
+      cur -= wi * sg[si < 0 ? 0 : si > 1023 ? 1023 : si | 0] * itsi;
+      const un = ui + dt * (diff[i] - cur);
+      if (ui < ACT_THR && un >= ACT_THR) { actPrev[i] = act[i]; act[i] = t; }
+      u[i] = un; v[i] = vi + dt * dv; w[i] = wi + dt * dw;
+    }
+    T.t = t + dt;
+  }
+}
+
+// Drug / remodelling multipliers shared by the mesh and the 1D reference cable.
+// fs = mesh spacing / reference spacing: a coarser mesh gets a proportionally broader wavefront
+// (td and D both scaled by fs), which keeps conduction velocity the same.
+const H_REF = 0.535;
+const KN = { na: 0.4, remodel: 0.6, k: 0.4, cx: 0.75, apdFreq: 3.5, fibDead: 0.4 };
+function kinetics(p, fs) {
+  return {
+    gfi: (1 / (FK.td * fs)) * (1 - KN.na * p.naBlock),
+    // plateau length follows the decay of the slow inward gate, so twp sets APD
+    twpScale: (1 - KN.remodel * p.remodel) * (1 + KN.k * p.kBlock),
+    // remodelling also uncouples cells (connexin loss), slowing conduction
+    dScale: 1 - KN.cx * p.remodel,
+  };
+}
+
+// 1D reference cable with the mesh's kinetics (fs) on a finer grid: reports CV, APD and wavelength
+// for the current drug/remodelling state.
+function measureCable(p, dx, dt, paceCL, fs) {
+  const n = 220, rs = new Int32Array(n + 1), colA = [];
+  for (let i = 0; i < n; i++) { if (i > 0) colA.push(i - 1); if (i < n - 1) colA.push(i + 1); rs[i + 1] = colA.length; }
+  const T = makeTissue(n, rs, Int32Array.from(colA));
+  const kin = kinetics(p, fs);
+  for (let i = 0; i < n; i++) for (let k = rs[i]; k < rs[i + 1]; k++) T.wgt[6 * i + k - rs[i]] = FK.D * fs * kin.dScale / (dx * dx);
+  T.itvp = 1 / (FK.tvp * fs); T.gfi.fill(kin.gfi); T.iwp.fill(1 / (FK.twp * kin.twpScale));
+  const nodes = Int32Array.from([0, 1, 2, 3]), beats = 3, a = 70, b = 150, spm = Math.round(1 / dt);
+  let cv = 0, apd = 0, up = -1;
+  for (let beat = 0; beat < beats; beat++) {
+    T.stims.push({ nodes, until: T.t + 2, amp: 0.5 });
+    for (let ms = 0; ms < paceCL; ms++) {
+      const before = T.u[110];
+      stepTissue(T, dt, spm);
+      if (beat === beats - 1) {
+        if (before < ACT_THR && T.u[110] >= ACT_THR) up = T.t;
+        if (up > 0 && !apd && before >= 0.1 && T.u[110] < 0.1) apd = T.t - up;
+      }
+    }
+    if (beat === beats - 1) {
+      const t0 = beat * paceCL;
+      if (T.act[a] >= t0 && T.act[b] > T.act[a]) cv = (b - a) * dx / (T.act[b] - T.act[a]);
+    }
+  }
+  return { cv, apd, wavelength: cv * apd }; // mm/ms, ms, mm
+}
+
+// ---------- the atrial simulation ----------
+function createSim(freq) {
+  const M = buildMesh(freq || 48);
+  const n = M.n, T = makeTissue(n, M.rs, M.col);
+  const dirOf = i => [M.dirs[3 * i], M.dirs[3 * i + 1], M.dirs[3 * i + 2]];
+  const nearestToDir = d => { let best = 0, bd = -2; for (let i = 0; i < n; i++) { const c = M.dirs[3 * i] * d[0] + M.dirs[3 * i + 1] * d[1] + M.dirs[3 * i + 2] * d[2]; if (c > bd) { bd = c; best = i; } } return best; };
+  const nodesNear = (p, radius) => {
+    const out = [], r2 = radius * radius;
+    for (let i = 0; i < n; i++) { const dx = M.pos[3 * i] - p[0], dy = M.pos[3 * i + 1] - p[1], dz = M.pos[3 * i + 2] - p[2]; if (dx * dx + dy * dy + dz * dz <= r2) out.push(i); }
+    return Int32Array.from(out);
+  };
+  const posOf = i => [M.pos[3 * i], M.pos[3 * i + 1], M.pos[3 * i + 2]];
+
+  const fs = M.meanEdge / H_REF;
+  // explicit Euler: time step set by the stiffest node of the mesh
+  let maxRate = 0;
+  for (let i = 0; i < n; i++) { let r = 0; for (let k = M.rs[i]; k < M.rs[i + 1]; k++) r += M.w0[k]; r *= FK.D * fs / M.area[i]; if (r > maxRate) maxRate = r; }
+  const spm = Math.max(4, Math.ceil(maxRate / 0.8)), dt = 1 / spm;
+  const params = {
+    naBlock: 0, kBlock: 0, remodel: 0, fibrosis: 0, fibSeed: 7, dispersion: 0.1,
+    sinusOn: true, sinusCL: 800, qrs: true,
+  };
+  const ablated = new Uint8Array(n), fibrotic = new Uint8Array(n); // fibrotic: 1 = patch (slow), 2 = dead
+  const undoStack = [];
+
+  // smooth pseudo-random fields on the sphere (sum of plane waves)
+  function noiseField(seed, freq) {
+    const rnd = mulberry32(seed), K = 9, ws = [];
+    for (let k = 0; k < K; k++) {
+      const d = norm3([rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1]), f = freq * (0.6 + 0.8 * rnd());
+      ws.push([d[0] * f, d[1] * f, d[2] * f, rnd() * 6.2832]);
+    }
+    const out = new Float32Array(n);
+    let mx = 0;
+    for (let i = 0; i < n; i++) {
+      let s = 0;
+      for (const q of ws) s += Math.cos(q[0] * M.dirs[3 * i] + q[1] * M.dirs[3 * i + 1] + q[2] * M.dirs[3 * i + 2] + q[3]);
+      out[i] = s; if (Math.abs(s) > mx) mx = Math.abs(s);
+    }
+    for (let i = 0; i < n; i++) out[i] /= mx;
+    return out;
+  }
+  const apdNoise = noiseField(1234, KN.apdFreq);
+  let fibNoise = null, fibNoiseSeed = -1;
+
+  function applySubstrate() {
+    const kin = kinetics(params, fs);
+    T.itvp = 1 / (FK.tvp * fs);
+    // fibrosis: patches cover `fibrosis` of the surface; inside them ~40% of nodes are non-conducting
+    fibrotic.fill(0);
+    if (params.fibrosis > 0) {
+      if (fibNoiseSeed !== params.fibSeed) { fibNoise = noiseField(params.fibSeed * 7919 + 13, 7); fibNoiseSeed = params.fibSeed; }
+      const sorted = Float32Array.from(fibNoise).sort();
+      const thr = sorted[Math.min(n - 1, Math.floor(n * (1 - params.fibrosis)))];
+      const rnd = mulberry32(params.fibSeed * 31 + 5);
+      for (let i = 0; i < n; i++) { const r = rnd(); if (fibNoise[i] >= thr) fibrotic[i] = r < KN.fibDead ? 2 : 1; }
+    }
+    for (let i = 0; i < n; i++) {
+      T.dead[i] = (ablated[i] || fibrotic[i] === 2) ? 1 : 0;
+      if (T.dead[i]) { T.u[i] = 0; T.v[i] = 1; T.w[i] = 1; T.diff[i] = 0; }
+      const apdF = (1 - 0.30 * M.sleeve[i]) * (1 + params.dispersion * apdNoise[i]) * kin.twpScale;
+      T.gfi[i] = kin.gfi * (1 - 0.15 * M.sleeve[i]);
+      T.iwp[i] = 1 / (FK.twp * apdF);
+    }
+    for (let i = 0; i < n; i++) {
+      const ci = fibrotic[i] === 1 ? 0.7 : 1, s = FK.D * fs * kin.dScale / M.area[i];
+      for (let k = M.rs[i]; k < M.rs[i + 1]; k++) {
+        const j = M.col[k];
+        T.wgt[6 * i + k - M.rs[i]] = (T.dead[i] || T.dead[j]) ? 0 : s * M.w0[k] * ci * (fibrotic[j] === 1 ? 0.7 : 1);
+      }
+    }
+    sigScale = 1 / kin.dScale;
+    tissueDirty = true;
+  }
+  // electrode signals use the source strength without the coupling reduction, so remodelled tissue stays readable
+  let tissueDirty = true, sigScale = 1;
+
+  // ---------- pacing ----------
+  const bachNode = nearestToDir(ANAT.bachmann), bachNodes = nodesNear(posOf(bachNode), 3);
+  const avNode = nearestToDir(ANAT.avn);
+  let lastSinus = -1e9;
+  function stim(nodes, dur, amp) { T.stims.push({ nodes, until: T.t + (dur || 2), amp: amp || 0.5 }); }
+  function paceAt(p, radius) { stim(nodesNear(p, radius || 2.5)); }
+  // ectopic focus on the sleeve of each PV (posterior aspect of the tube)
+  const pvFocus = ANAT.pvs.map(p => {
+    const side = norm3(cross3(p.axis, [0, 1, 0])), a = 0.25;
+    const d = norm3([p.axis[0] * Math.cos(a) + side[0] * Math.sin(a), p.axis[1] * Math.cos(a) + side[1] * Math.sin(a), p.axis[2] * Math.cos(a) + side[2] * Math.sin(a)]);
+    return nodesNear(posOf(nearestToDir(d)), 2.5);
+  });
+  // one premature beat, timed from the last local activation of the sleeve (coupling interval, ms)
+  function premature(pv, ci) {
+    const last = T.act[pvFocus[pv][0]];
+    schedule(Math.max(0, ci - (T.t - last)), () => stim(pvFocus[pv]));
+  }
+  const events = []; // {t, fn}
+  function schedule(delay, fn) { events.push({ t: T.t + delay, fn }); events.sort((a, b) => a.t - b.t); }
+  function ectopy(pv, count, cl, delay) {
+    for (let b = 0; b < count; b++) schedule((delay || 0) + b * cl, () => stim(pvFocus[pv]));
+  }
+
+  // ---------- electrodes ----------
+  // unipolar potential ~ sum over nodes of transmembrane current / distance
+  function electrodeWeights(p) {
+    const wts = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const dx = M.pos[3 * i] - p[0], dy = M.pos[3 * i + 1] - p[1], dz = M.pos[3 * i + 2] - p[2];
+      wts[i] = M.area[i] / Math.sqrt(dx * dx + dy * dy + dz * dz + 0.25);
+    }
+    return wts;
+  }
+  const leadAxis = norm3([0.5, -0.8, 0.2]);
+  const ecgPos = electrodeWeights(leadAxis.map(c => c * 160)), ecgNeg = electrodeWeights(leadAxis.map(c => -c * 160));
+  const ecgW = new Float64Array(n);
+  for (let i = 0; i < n; i++) ecgW[i] = ecgPos[i] - ecgNeg[i];
+  let cathW1 = null, cathW2 = null, cathNode = -1, cath = null;
+  function setCatheter(p, nv) {
+    const up = Math.abs(nv[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], tg = norm3(cross3(nv, up));
+    const e1 = [p[0] + nv[0] - 1.5 * tg[0], p[1] + nv[1] - 1.5 * tg[1], p[2] + nv[2] - 1.5 * tg[2]];
+    const e2 = [p[0] + nv[0] + 1.5 * tg[0], p[1] + nv[1] + 1.5 * tg[1], p[2] + nv[2] + 1.5 * tg[2]];
+    cathW1 = electrodeWeights(e1); cathW2 = electrodeWeights(e2);
+    let best = 0, bd = 1e9;
+    for (let i = 0; i < n; i++) { const d = (M.pos[3 * i] - p[0]) ** 2 + (M.pos[3 * i + 1] - p[1]) ** 2 + (M.pos[3 * i + 2] - p[2]) ** 2; if (d < bd && !T.dead[i]) { bd = d; best = i; } }
+    cathNode = best; cath = { pos: p.slice(), nrm: nv.slice(), e1, e2 };
+  }
+  { const i = nearestToDir(norm3([0, 0.1, -1])); setCatheter(posOf(i), [M.nrm[3 * i], M.nrm[3 * i + 1], M.nrm[3 * i + 2]]); }
+
+  // ---------- AV node + ventricular complexes for the pseudo-ECG ----------
+  const avRnd = mulberry32(99);
+  let avRefUntil = -1e9, avSeen = -1e9; const qrsTimes = [];
+  function avInput(t) {
+    if (t >= avRefUntil) {
+      const early = Math.exp(-(t - avRefUntil) / 80);
+      qrsTimes.push(t + 110 + 90 * early);
+      avRefUntil = t + 330 + 120 * avRnd();
+    } else avRefUntil = Math.min(avRefUntil + 28, t + 520); // concealed conduction
+    while (qrsTimes.length && qrsTimes[0] < t - 700) qrsTimes.shift();
+  }
+  const g = (x, m, s) => Math.exp(-0.5 * ((x - m) / s) ** 2);
+  function qrsAt(t) {
+    let y = 0;
+    for (const q of qrsTimes) {
+      const x = t - q; if (x < -40 || x > 520) continue;
+      y += -0.12 * g(x, -14, 6) + 1.0 * g(x, 0, 9) - 0.22 * g(x, 16, 8) + 0.26 * g(x, 250, 48);
+    }
+    return y;
+  }
+
+  // ---------- signals (1 kHz) ----------
+  const ECG_GAIN = 60, EGM_GAIN = 3.5;
+  const sig = { ecg: [], uni: [], bip: [] };
+  function sample() {
+    const diff = T.diff; let e = 0, a = 0, b = 0;
+    for (let i = 0; i < n; i++) { const d = diff[i]; e += d * ecgW[i]; a += d * cathW1[i]; b += d * cathW2[i]; }
+    sig.ecg.push(e * ECG_GAIN * sigScale + (params.qrs ? qrsAt(T.t) : 0)); sig.uni.push(a * EGM_GAIN * sigScale); sig.bip.push((a - b) * EGM_GAIN * sigScale);
+  }
+
+  function advance(ms) {
+    for (let m = 0; m < ms; m++) {
+      const t = T.t;
+      if (params.sinusOn && t - Math.max(T.act[bachNode], lastSinus) >= params.sinusCL) { stim(bachNodes); lastSinus = t; }
+      while (events.length && events[0].t <= t) events.shift().fn();
+      stepTissue(T, dt, spm);
+      if (T.act[avNode] !== avSeen) { avSeen = T.act[avNode]; avInput(avSeen); }
+      sample();
+    }
+  }
+
+  // ---------- state helpers ----------
+  function reset() {
+    restTissue(T); events.length = 0; lastSinus = -1e9; avRefUntil = -1e9; avSeen = -1e9; qrsTimes.length = 0;
+    sig.ecg.length = sig.uni.length = sig.bip.length = 0;
+    for (let i = 0; i < n; i++) T.dead[i] = (ablated[i] || fibrotic[i] === 2) ? 1 : 0;
+  }
+  function shock() { for (let i = 0; i < n; i++) if (!T.dead[i]) T.u[i] = 1; T.stims.length = 0; events.length = 0; }
+
+  // great-arc geometry on the unit sphere of vertex directions
+  function arcDist(d, A, B) { // angular distance from d to the arc A->B, plus position along it (0..1)
+    const nrmv = norm3(cross3(A, B)), tot = Math.acos(clamp(dot3(A, B), -1, 1));
+    const side = dot3(d, nrmv), inA = dot3(cross3(A, d), nrmv), inB = dot3(cross3(d, B), nrmv);
+    if (inA >= 0 && inB >= 0) {
+      const proj = norm3([d[0] - side * nrmv[0], d[1] - side * nrmv[1], d[2] - side * nrmv[2]]);
+      return { dist: Math.abs(Math.asin(clamp(side, -1, 1))), side, along: Math.acos(clamp(dot3(A, proj), -1, 1)) / tot, inside: true };
+    }
+    const dA = Math.acos(clamp(dot3(d, A), -1, 1)), dB = Math.acos(clamp(dot3(d, B), -1, 1));
+    return { dist: Math.min(dA, dB), side, along: dA < dB ? 0 : 1, inside: false };
+  }
+
+  // Seed a rotor: a broken wavefront along the arc tip->anchor, moving toward +side, refractory behind it.
+  function seedRotor(tip, anchor) {
+    for (let i = 0; i < n; i++) {
+      if (T.dead[i]) continue;
+      const a = arcDist(dirOf(i), tip, anchor); if (!a.inside) continue;
+      const s = Math.asin(clamp(a.side, -1, 1)) * ANAT.R; // mm
+      if (s >= 0 && s < 5) { T.u[i] = 1; T.v[i] = 0.9; T.w[i] = 0.9; }
+      else if (s < 0 && s > -35) { const r = -s / 35; T.u[i] = 0; T.v[i] = r * r; T.w[i] = 0.3 + 0.7 * r; }
+    }
+  }
+
+  // ---------- ablation ----------
+  const HALF = 0.085; // lesion half-width (rad): lines about 4 mm wide
+  const pairs = { left: [0, 1], right: [2, 3] };
+  const ringOffset = ANAT.pv.tout + 0.07;
+  function lesionNodes(name, gap) {
+    const out = [], ax = k => ANAT.pvs[k].axis;
+    const ringD = (d, side) => arcDist(d, ax(pairs[side][0]), ax(pairs[side][1])).dist;
+    const insideRings = d => ringD(d, 'left') < ringOffset - HALF || ringD(d, 'right') < ringOffset - HALF;
+    const line = (A, B, gapAt) => {
+      for (let i = 0; i < n; i++) {
+        const d = dirOf(i), a = arcDist(d, A, B);
+        if (!a.inside || a.dist > HALF || insideRings(d)) continue;
+        if (gap && gapAt !== undefined && Math.abs(a.along - gapAt) < 0.05) continue;
+        out.push(i);
+      }
+    };
+    const ring = (side, withGap) => {
+      const A = ax(pairs[side][0]), B = ax(pairs[side][1]);
+      // the gap sits on the posterior-wall side of the ring, level with the superior vein
+      const toward = norm3([0, 0.25, -1]);
+      for (let i = 0; i < n; i++) {
+        const d = dirOf(i);
+        if (Math.abs(arcDist(d, A, B).dist - ringOffset) > HALF) continue;
+        if (withGap) { const gp = norm3([A[0] + 0.62 * toward[0], A[1] + 0.62 * toward[1], A[2] + 0.62 * toward[2]]); if (Math.acos(clamp(dot3(d, gp), -1, 1)) < 0.20) continue; }
+        out.push(i);
+      }
+    };
+    if (name === 'pviLeft') ring('left', gap);
+    else if (name === 'pviRight') ring('right', gap);
+    else if (name === 'roof') line(ax(0), ax(2), 0.5);
+    else if (name === 'floor') line(ax(1), ax(3), 0.5);
+    else if (name === 'mitral') line(ax(1), ANAT.mv.axis, 0.6);
+    else if (name === 'box') { ring('left', false); ring('right', false); line(ax(0), ax(2), 0.5); line(ax(1), ax(3), 0.5); }
+    return out;
+  }
+  function ablate(nodes) {
+    const fresh = [];
+    for (const i of nodes) if (!ablated[i]) { ablated[i] = 1; fresh.push(i); }
+    if (fresh.length) { undoStack.push(fresh); applySubstrate(); }
+    return fresh.length;
+  }
+  // extends the most recent undo entry so one brush stroke is one undo step
+  function ablateStroke(p, radius, newStroke) {
+    const fresh = [];
+    for (const i of nodesNear(p, radius)) if (!ablated[i]) { ablated[i] = 1; fresh.push(i); }
+    if (!fresh.length) return;
+    if (newStroke || !undoStack.length) undoStack.push(fresh); else undoStack[undoStack.length - 1].push(...fresh);
+    applySubstrate();
+  }
+  function undoAblation() { const last = undoStack.pop(); if (!last) return; for (const i of last) ablated[i] = 0; applySubstrate(); }
+  function clearAblation() { ablated.fill(0); undoStack.length = 0; applySubstrate(); }
+
+  // ---------- display ----------
+  const phase = new Float32Array(n);
+  function computePhase() { for (let i = 0; i < n; i++) phase[i] = Math.atan2(T.v[i] - 0.4, T.u[i] - 0.3); }
+  function scalars(mode, out) {
+    if (mode === 1) { computePhase(); for (let i = 0; i < n; i++) out[i] = phase[i] / 6.2832 + 0.5; }
+    else if (mode === 2) { const t = T.t; for (let i = 0; i < n; i++) out[i] = t - T.act[i]; }
+    else for (let i = 0; i < n; i++) out[i] = T.u[i];
+    return out;
+  }
+  // phase singularities: triangles around which the phase winds by +-2pi; nearby opposite pairs cancel
+  function detectPS() {
+    computePhase();
+    const idx = M.idx, raw = [], TWO = 6.2832, PI = Math.PI;
+    const wrap = x => x > PI ? x - TWO : x < -PI ? x + TWO : x;
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+      if (T.dead[a] || T.dead[b] || T.dead[c]) continue;
+      const s = wrap(phase[b] - phase[a]) + wrap(phase[c] - phase[b]) + wrap(phase[a] - phase[c]);
+      if (s > 3 || s < -3) raw.push([(M.pos[3 * a] + M.pos[3 * b] + M.pos[3 * c]) / 3, (M.pos[3 * a + 1] + M.pos[3 * b + 1] + M.pos[3 * c + 1]) / 3, (M.pos[3 * a + 2] + M.pos[3 * b + 2] + M.pos[3 * c + 2]) / 3, s > 0 ? 1 : -1]);
+    }
+    const kept = [];
+    for (const p of raw) {
+      let merged = false;
+      for (let q = 0; q < kept.length; q++) {
+        const k = kept[q];
+        if ((k[0] - p[0]) ** 2 + (k[1] - p[1]) ** 2 + (k[2] - p[2]) ** 2 < 16) {
+          k[3] += p[3]; merged = true; break;
+        }
+      }
+      if (!merged) kept.push(p.slice());
+    }
+    return kept.filter(k => k[3] !== 0).map(k => [k[0], k[1], k[2], Math.sign(k[3])]);
+  }
+  // separate excited regions = wavefront count
+  const seen = new Int32Array(n); let seenGen = 0; const stack = new Int32Array(n);
+  function countWaves() {
+    seenGen++; let count = 0;
+    for (let s = 0; s < n; s++) {
+      if (seen[s] === seenGen || T.dead[s] || T.u[s] < 0.6) continue;
+      let top = 0, size = 0; stack[top++] = s; seen[s] = seenGen;
+      while (top) {
+        const i = stack[--top]; size++;
+        for (let k = M.rs[i]; k < M.rs[i + 1]; k++) { const j = M.col[k]; if (seen[j] !== seenGen && !T.dead[j] && T.u[j] >= 0.6) { seen[j] = seenGen; stack[top++] = j; } }
+      }
+      if (size >= 8) count++;
+    }
+    return count;
+  }
+  function tissueFlags(out) { for (let i = 0; i < n; i++) out[i] = ablated[i] ? 3 : fibrotic[i]; return out; }
+  function catheterCL() {
+    if (cathNode < 0) return 0;
+    const a = T.act[cathNode], b = T.actPrev[cathNode];
+    return (b > -1e8 && T.t - a < 1500) ? a - b : 0;
+  }
+
+  // ---------- scenario presets ----------
+  const PRESETS = {
+    sinus: { p: { naBlock: 0, kBlock: 0, remodel: 0, fibrosis: 0, dispersion: 0.1, sinusOn: true, sinusCL: 800 }, lesions: [] },
+    trigger: { p: { naBlock: 0, kBlock: 0, remodel: 1, fibrosis: 0.1, dispersion: 0.3, sinusOn: true, sinusCL: 700 }, lesions: [], run: () => ectopy(0, 12, 120, 1150) },
+    rotor: { p: { naBlock: 0, kBlock: 0, remodel: 1, fibrosis: 0, dispersion: 0, sinusOn: false, sinusCL: 800 }, lesions: [], run: () => seedRotor(norm3([0, 0.1, -1]), ANAT.mv.axis) },
+    wavelets: { p: { naBlock: 0, kBlock: 0, remodel: 1, fibrosis: 0, dispersion: 0.5, sinusOn: false, sinusCL: 800 }, lesions: [], run: () => { seedRotor(norm3([0, 0.1, -1]), ANAT.mv.axis); seedRotor(norm3([-0.3, 0.6, 0.7]), ANAT.pvs[2].axis); } },
+    pvi: { p: { naBlock: 0, kBlock: 0, remodel: 1, fibrosis: 0.1, dispersion: 0.3, sinusOn: true, sinusCL: 700 }, lesions: [['pviLeft', false], ['pviRight', false]], run: () => ectopy(0, 12, 120, 1150) },
+    gap: { p: { naBlock: 0, kBlock: 0, remodel: 1, fibrosis: 0.1, dispersion: 0.3, sinusOn: true, sinusCL: 700 }, lesions: [['pviLeft', true], ['pviRight', false]], run: () => ectopy(0, 12, 120, 1150) },
+  };
+  function preset(name) {
+    const P = PRESETS[name]; if (!P) return;
+    Object.assign(params, P.p);
+    ablated.fill(0); undoStack.length = 0;
+    for (const [l, gp] of P.lesions) for (const i of lesionNodes(l, gp)) ablated[i] = 1;
+    applySubstrate(); reset();
+    if (P.run) P.run();
+  }
+
+  applySubstrate();
+  return {
+    mesh: M, tissue: T, params, sig, dt,
+    applySubstrate, advance, reset, shock, paceAt, ectopy, premature, stim, pvFocus, seedRotor, setCatheter,
+    lesionNodes, ablate, ablateStroke, undoAblation, clearAblation,
+    scalars, detectPS, countWaves, tissueFlags, catheterCL, preset, nodesNear, nearestToDir, posOf,
+    get catheter() { return cath; },
+    takeTissueDirty() { const d = tissueDirty; tissueDirty = false; return d; },
+    measure(cl) { return measureCable(params, M.meanEdge / 2, dt, cl || 500, fs); },
+    reseedFibrosis() { params.fibSeed = params.fibSeed % 97 + 1; applySubstrate(); },
+    spm,
+    lesionCount() { let c = 0; for (let i = 0; i < n; i++) c += ablated[i]; return c; },
+  };
+}
+
+// ---------- message host: the same handler serves a Web Worker or the main thread ----------
+function createHost(post, budgetMs) {
+  let sim = null, carry = 0, frame = 0, measureAt = 0, lastPS = [], lastWaves = 0;
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const SUBSTRATE = ['naBlock', 'kBlock', 'remodel', 'fibrosis', 'dispersion'];
+  function init(freq) {
+    sim = createSim(freq); carry = 0; measureAt = now();
+    const M = sim.mesh;
+    post({ type: 'mesh', n: M.n, pos: M.pos, nrm: M.nrm, idx: M.idx, labels: M.labels, meanEdge: M.meanEdge, freq, pvNames: ANAT.pvs.map(p => p.name) });
+    post({ type: 'params', params: Object.assign({}, sim.params) });
+  }
+  const cmds = {
+    preset(a) { sim.preset(a.name); post({ type: 'params', params: Object.assign({}, sim.params) }); measureAt = now(); },
+    params(a) {
+      let sub = false;
+      for (const k in a.values) { sim.params[k] = a.values[k]; if (SUBSTRATE.includes(k)) sub = true; }
+      if (sub) { sim.applySubstrate(); measureAt = now() + 250; }
+    },
+    pace(a) { sim.paceAt(a.p, 2.5); },
+    catheter(a) { sim.setCatheter(a.p, a.n); },
+    ectopy(a) { sim.ectopy(a.pv, a.count, a.cl, 0); },
+    premature(a) { sim.premature(a.pv, a.ci); },
+    ablateStroke(a) { sim.ablateStroke(a.p, a.r, a.fresh); },
+    lesion(a) { sim.ablate(sim.lesionNodes(a.name, a.gap)); },
+    undo() { sim.undoAblation(); },
+    clear() { sim.clearAblation(); },
+    shock() { sim.shock(); },
+    rest() { sim.reset(); },
+    reseed() { sim.reseedFibrosis(); },
+    rotor(a) { sim.seedRotor(norm3(a.p), ANAT.mv.axis); },
+    warm(a) { sim.advance(a.ms); },
+  };
+  return function handle(m) {
+    if (m.type === 'init') return init(m.freq);
+    if (!sim) return;
+    if (m.type === 'cmd') return cmds[m.name](m.args || {});
+    if (m.type !== 'tick') return;
+    const t0 = now();
+    carry = Math.min(carry + m.ms, 60);
+    let done = 0;
+    while (carry >= 1) { sim.advance(1); carry -= 1; done++; if (now() - t0 > budgetMs) { carry = 0; break; } }
+    const out = {
+      type: 'frame', t: sim.tissue.t, done, mode: m.mode, cost: now() - t0,
+      val: sim.scalars(m.mode, new Float32Array(sim.mesh.n)),
+      ecg: Float32Array.from(sim.sig.ecg), uni: Float32Array.from(sim.sig.uni), bip: Float32Array.from(sim.sig.bip),
+      cl: sim.catheterCL(), catheter: sim.catheter, lesions: sim.lesionCount(),
+    };
+    sim.sig.ecg.length = sim.sig.uni.length = sim.sig.bip.length = 0;
+    if (frame++ % 4 === 0) { lastPS = sim.detectPS(); lastWaves = sim.countWaves(); }
+    out.ps = lastPS; out.waves = lastWaves;
+    if (sim.takeTissueDirty()) out.flags = sim.tissueFlags(new Uint8Array(sim.mesh.n));
+    if (measureAt && now() >= measureAt) { measureAt = 0; out.measure = sim.measure(400); }
+    post(out);
+  };
+}
+
+return { createSim, createHost, buildMesh, measureCable, ANAT, FK, KN, norm3 };
+})();
+
+if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {
+  const handle = AFSim.createHost(m => self.postMessage(m), 45);
+  self.onmessage = e => handle(e.data);
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = AFSim;
+
+</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const HINTS = {
+  sinus: "Sinus rhythm in a healthy atrium: each beat enters at Bachmann's bundle and crosses the atrium in about 100 ms. Fire a PV burst from the Rhythm tab: it conducts but cannot sustain.",
+  trigger: 'Remodelled, mildly fibrotic atrium. After two sinus beats, a burst from the LSPV breaks up into fibrillation. Try a shock or class I drug under Therapy.',
+  rotor: 'One spiral wave seeded on the posterior wall of a remodelled atrium. Switch to Phase under Display to follow its core; it can drift and anchor to a vein or the annulus.',
+  wavelets: 'Short wavelength plus strong repolarisation heterogeneity: rotors form, break up and collide continuously. Move the catheter to compare electrograms between sites.',
+  pvi: 'Same atrium and same LSPV burst, with both vein pairs encircled. The vein fires but the atrial body stays in sinus rhythm.',
+  gap: 'The left circle has a gap on its posterior side, so the burst escapes into the atrium. Close the gap with the Ablate tool, then fire the burst again from the Rhythm tab.',
+};
+const TOOL_HINTS = {
+  rotate: 'Drag to rotate, scroll to zoom.',
+  pace: 'Click the surface to deliver a paced beat there.',
+  catheter: 'Click the surface to move the mapping catheter; its electrograms are shown below.',
+  ablate: 'Drag on the surface to create lesions. Hold Shift to rotate.',
+  rotor: 'Click the surface to seed a spiral wave with its tip at that point.',
+};
+
+// ---------- state ----------
+let mesh = null, params = {}, mode = 0, tool = 'rotate', running = true, speed = 120, owed = 0, pending = false;
+let ps = [], waves = 0, catheter = null, simT = 0, lesions = 0, achieved = 0, stepExtra = 0, pv = 0;
+const N_SIG = 8192, WINDOW = 3000;
+const sig = { ecg: new Float32Array(N_SIG), uni: new Float32Array(N_SIG), bip: new Float32Array(N_SIG), w: 0, count: 0 };
+const cam = { yaw: Math.PI, pitch: 0.17, dist: 118, target: [0, 1, -2], fov: 34 * Math.PI / 180 };
+
+// ---------- simulation host (worker, or main thread if workers are unavailable) ----------
+const coreSrc = $('sim-core').textContent;
+let send = null, worker = null, gotMesh = false;
+function mainThreadHost() {
+  const handle = AFSim.createHost(m => setTimeout(() => onMsg(m), 0), 11);
+  return m => handle(m);
+}
+function startHost() {
+  const init = () => send({ type: 'init', freq: +$('freq').value });
+  const fallBack = () => { if (gotMesh || !worker) return; worker.terminate(); worker = null; send = mainThreadHost(); init(); cmd('preset', { name: start }); };
+  try {
+    if (new URLSearchParams(location.search).get('worker') === '0') throw new Error('worker disabled');
+    worker = new Worker(URL.createObjectURL(new Blob([coreSrc], { type: 'text/javascript' })));
+    worker.onmessage = e => onMsg(e.data);
+    worker.onerror = fallBack;
+    send = m => worker.postMessage(m);
+    setTimeout(fallBack, 4000); // a worker that never answers is treated as unavailable
+  } catch (e) { worker = null; send = mainThreadHost(); }
+  init();
+}
+const cmd = (name, args) => send({ type: 'cmd', name, args });
+
+function onMsg(m) {
+  if (m.type === 'mesh') { gotMesh = true; mesh = m; uploadMesh(); pending = false; sig.count = 0; return; }
+  if (m.type === 'params') { params = m.params; syncControls(); return; }
+  if (m.type !== 'frame') return;
+  pending = false; simT = m.t; ps = m.ps; waves = m.waves; catheter = m.catheter; lesions = m.lesions;
+  if (m.val.length !== mesh.n) return;
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf.val); gl.bufferSubData(gl.ARRAY_BUFFER, 0, m.val);
+  if (m.flags) { gl.bindBuffer(gl.ARRAY_BUFFER, buf.flag); gl.bufferSubData(gl.ARRAY_BUFFER, 0, m.flags); }
+  for (let i = 0; i < m.ecg.length; i++) {
+    sig.ecg[sig.w] = m.ecg[i]; sig.uni[sig.w] = m.uni[i]; sig.bip[sig.w] = m.bip[i];
+    sig.w = (sig.w + 1) % N_SIG; sig.count++;
+  }
+  const nowT = performance.now(); achieved += (m.done * 1000 / Math.max(4, nowT - lastMsgT) - achieved) * 0.1; lastMsgT = nowT; shownMode = m.mode;
+  if (m.measure) showMeasure(m.measure);
+  lastCL = m.cl;
+}
+let lastCL = 0, frameDt = 16, lastMsgT = performance.now(), shownMode = 0;
+
+// ---------- WebGL ----------
+const glc = $('gl'), gl = glc.getContext('webgl2', { antialias: true, alpha: true });
+const ov = $('ov'), octx = ov.getContext('2d');
+const buf = {};
+let prog, uni = {}, vao;
+function shader(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function initGL() {
+  const vs = `#version 300 es
+in vec3 aPos; in vec3 aNrm; in float aVal; in float aFlag;
+uniform mat4 uMVP; out vec3 vPos; out vec3 vNrm; out float vVal; out float vFlag;
+void main() { vPos = aPos; vNrm = aNrm; vVal = aVal; vFlag = aFlag; gl_Position = uMVP * vec4(aPos, 1.0); }`;
+  const fs = `#version 300 es
+precision highp float;
+in vec3 vPos; in vec3 vNrm; in float vVal; in float vFlag;
+uniform int uMode; uniform vec3 uEye; uniform float uFib; out vec4 o;
+vec3 hue(float h) { return clamp(abs(fract(h + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); }
+void main() {
+  vec3 c;
+  if (uMode == 0) {
+    float u = clamp(vVal, 0.0, 1.0);
+    vec3 rest = vec3(0.30, 0.20, 0.28), mid = vec3(0.93, 0.38, 0.12), hot = vec3(1.0, 0.93, 0.62);
+    c = u < 0.5 ? mix(rest, mid, u * 2.0) : mix(mid, hot, (u - 0.5) * 2.0);
+  } else if (uMode == 1) c = hue(vVal) * 0.9 + 0.05;
+  else c = vVal > 240.0 ? vec3(0.33, 0.30, 0.37) : hue(clamp(vVal / 240.0, 0.0, 1.0) * 0.78);
+  vec3 grey = vec3(0.62, 0.62, 0.58);
+  if (vFlag > 2.5) c = vec3(0.17, 0.03, 0.05);
+  else if (vFlag > 1.5) c = mix(c, grey, uFib);
+  else if (vFlag > 0.5) c = mix(c, grey, 0.3 * uFib);
+  float d = abs(dot(normalize(vNrm), normalize(uEye - vPos)));
+  o = vec4(c * (gl_FrontFacing ? 0.32 + 0.68 * d : 0.16 + 0.30 * d), 1.0);
+}`;
+  prog = gl.createProgram();
+  gl.attachShader(prog, shader(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, fs));
+  ['aPos', 'aNrm', 'aVal', 'aFlag'].forEach((a, i) => gl.bindAttribLocation(prog, i, a));
+  gl.linkProgram(prog);
+  for (const u of ['uMVP', 'uMode', 'uEye', 'uFib']) uni[u] = gl.getUniformLocation(prog, u);
+  gl.enable(gl.DEPTH_TEST);
+}
+function uploadMesh() {
+  if (vao) { gl.deleteVertexArray(vao); Object.values(buf).forEach(b => gl.deleteBuffer(b)); }
+  vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const attr = (name, loc, data, size, type, usage) => {
+    buf[name] = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf[name]); gl.bufferData(gl.ARRAY_BUFFER, data, usage);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, type, false, 0, 0);
+  };
+  attr('pos', 0, mesh.pos, 3, gl.FLOAT, gl.STATIC_DRAW);
+  attr('nrm', 1, mesh.nrm, 3, gl.FLOAT, gl.STATIC_DRAW);
+  attr('val', 2, new Float32Array(mesh.n), 1, gl.FLOAT, gl.DYNAMIC_DRAW);
+  attr('flag', 3, new Uint8Array(mesh.n), 1, gl.UNSIGNED_BYTE, gl.DYNAMIC_DRAW);
+  buf.idx = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.idx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.idx, gl.STATIC_DRAW);
+}
+
+// ---------- camera maths ----------
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+let view = { eye: [0, 0, 1], f: [0, 0, -1], r: [1, 0, 0], u: [0, 1, 0], mvp: new Float32Array(16), w: 1, h: 1 };
+function updateCamera() {
+  const dist = cam.dist * Math.max(1, 1.2 * glc.clientHeight / glc.clientWidth); // keep the atrium in frame on tall screens
+  const cp = Math.cos(cam.pitch), eye = [cam.target[0] + dist * cp * Math.sin(cam.yaw), cam.target[1] + dist * Math.sin(cam.pitch), cam.target[2] + dist * cp * Math.cos(cam.yaw)];
+  const f = norm(sub(cam.target, eye)), r = norm(cross(f, [0, 1, 0])), u = cross(r, f);
+  const w = glc.clientWidth, h = glc.clientHeight, t = 1 / Math.tan(cam.fov / 2), a = w / h, near = 10, far = 900;
+  const V = [r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0, -dot(r, eye), -dot(u, eye), dot(f, eye), 1];
+  const P = [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0];
+  const m = view.mvp;
+  for (let c = 0; c < 4; c++) for (let rw = 0; rw < 4; rw++) { let s = 0; for (let k = 0; k < 4; k++) s += P[k * 4 + rw] * V[c * 4 + k]; m[c * 4 + rw] = s; }
+  Object.assign(view, { eye, f, r, u, w, h });
+}
+function project(p) {
+  const m = view.mvp, x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+  return [(x / w * 0.5 + 0.5) * view.w, (0.5 - y / w * 0.5) * view.h];
+}
+// nearest surface hit under a pixel: {p, n} or null
+function pick(px, py) {
+  if (!mesh) return null;
+  const th = Math.tan(cam.fov / 2), nx = (2 * px / view.w - 1) * th * view.w / view.h, ny = (1 - 2 * py / view.h) * th;
+  const d = norm([view.f[0] + nx * view.r[0] + ny * view.u[0], view.f[1] + nx * view.r[1] + ny * view.u[1], view.f[2] + nx * view.r[2] + ny * view.u[2]]);
+  const o = view.eye, P = mesh.pos, I = mesh.idx;
+  let best = Infinity, bn = null;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = 3 * I[t], b = 3 * I[t + 1], c = 3 * I[t + 2];
+    const e1x = P[b] - P[a], e1y = P[b + 1] - P[a + 1], e1z = P[b + 2] - P[a + 2], e2x = P[c] - P[a], e2y = P[c + 1] - P[a + 1], e2z = P[c + 2] - P[a + 2];
+    const px_ = d[1] * e2z - d[2] * e2y, py_ = d[2] * e2x - d[0] * e2z, pz_ = d[0] * e2y - d[1] * e2x;
+    const det = e1x * px_ + e1y * py_ + e1z * pz_;
+    if (det > -1e-9 && det < 1e-9) continue;
+    const inv = 1 / det, tx = o[0] - P[a], ty = o[1] - P[a + 1], tz = o[2] - P[a + 2];
+    const u = (tx * px_ + ty * py_ + tz * pz_) * inv; if (u < 0 || u > 1) continue;
+    const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+    const v = (d[0] * qx + d[1] * qy + d[2] * qz) * inv; if (v < 0 || u + v > 1) continue;
+    const dist = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    if (dist > 0 && dist < best) { best = dist; bn = [e1y * e2z - e1z * e2y, e1z * e2x - e1x * e2z, e1x * e2y - e1y * e2x]; }
+  }
+  if (!bn) return null;
+  let n = norm(bn); if (dot(n, d) > 0) n = [-n[0], -n[1], -n[2]];
+  return { p: [o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best], n };
+}
+
+// ---------- drawing ----------
+function resize(c) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return dpr;
+}
+const facing = (p, n) => dot(n, norm(sub(view.eye, p)));
+function draw() {
+  resize(glc); const dpr = resize(ov);
+  updateCamera();
+  gl.viewport(0, 0, glc.width, glc.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, view.w, view.h);
+  if (!mesh) return;
+  gl.useProgram(prog); gl.bindVertexArray(vao);
+  gl.uniformMatrix4fv(uni.uMVP, false, view.mvp); gl.uniform1i(uni.uMode, shownMode); gl.uniform3fv(uni.uEye, view.eye);
+  gl.uniform1f(uni.uFib, $('showFib').checked ? 1 : 0);
+  gl.drawElements(gl.TRIANGLES, mesh.idx.length, gl.UNSIGNED_INT, 0);
+
+  octx.font = '12px system-ui, sans-serif'; octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  if ($('showLabels').checked) for (const l of mesh.labels) {
+    const fc = facing(l.pos, l.dir); if (fc < 0.1) continue;
+    const s = project(l.pos); octx.globalAlpha = Math.min(1, fc * 2.5);
+    octx.lineWidth = 3; octx.strokeStyle = 'rgba(10,14,22,.75)'; octx.strokeText(l.name, s[0], s[1]);
+    octx.fillStyle = '#e8edf6'; octx.fillText(l.name, s[0], s[1]);
+  }
+  octx.globalAlpha = 1;
+  if ($('showPS').checked) for (const q of ps) {
+    const p = [q[0], q[1], q[2]]; if (facing(p, norm(p)) < 0.05) continue;
+    const s = project(p);
+    octx.beginPath(); octx.arc(s[0], s[1], 8, 0, 6.2832); octx.lineWidth = 2.5; octx.strokeStyle = q[3] > 0 ? '#ffffff' : '#111827'; octx.stroke();
+    octx.beginPath(); octx.arc(s[0], s[1], 3, 0, 6.2832); octx.fillStyle = q[3] > 0 ? '#111827' : '#ffffff'; octx.fill();
+  }
+  if (catheter) {
+    const vis = facing(catheter.pos, catheter.nrm) > 0, a = project(catheter.e1), b = project(catheter.e2);
+    const tip = project([catheter.pos[0] + catheter.nrm[0] * 14, catheter.pos[1] + catheter.nrm[1] * 14, catheter.pos[2] + catheter.nrm[2] * 14]);
+    octx.globalAlpha = vis ? 1 : 0.3; octx.strokeStyle = '#6cc9ff'; octx.lineWidth = 2;
+    octx.beginPath(); octx.moveTo(tip[0], tip[1]); octx.lineTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); octx.stroke();
+    for (const e of [a, b]) { octx.beginPath(); octx.arc(e[0], e[1], 3.5, 0, 6.2832); octx.fillStyle = '#6cc9ff'; octx.fill(); octx.lineWidth = 1; octx.strokeStyle = '#0b1220'; octx.stroke(); }
+    octx.globalAlpha = 1;
+  }
+}
+
+const sc = $('strips'), sctx = sc.getContext('2d');
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function drawStrips() {
+  const dpr = resize(sc), w = sc.clientWidth, h = sc.clientHeight;
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0); sctx.clearRect(0, 0, w, h);
+  const lanes = [['Far-field lead (pseudo-ECG)', sig.ecg, css('--ecg'), 1.25, 0.72], ['Catheter unipolar (auto gain)', sig.uni, css('--uni'), 0, 0.5], ['Catheter bipolar (auto gain)', sig.bip, css('--bip'), 0, 0.5]];
+  const lh = h / lanes.length, x0 = 0, n = Math.min(sig.count, WINDOW);
+  // time grid: scrolls with the trace, 200 ms minor and 1 s major
+  const tEnd = simT;
+  for (let k = Math.ceil((tEnd - WINDOW) / 200); k * 200 <= tEnd; k++) {
+    const x = x0 + (k * 200 - (tEnd - WINDOW)) / WINDOW * w;
+    sctx.strokeStyle = k % 5 === 0 ? 'rgba(140,155,180,.28)' : 'rgba(140,155,180,.10)'; sctx.lineWidth = 1;
+    sctx.beginPath(); sctx.moveTo(x, 0); sctx.lineTo(x, h); sctx.stroke();
+  }
+  sctx.font = '11px system-ui, sans-serif'; sctx.textBaseline = 'top';
+  lanes.forEach(([name, data, color, range, base], li) => {
+    if (!range) { range = 0.25; for (let i = 0; i < n; i++) range = Math.max(range, Math.abs(data[(sig.w - n + i + N_SIG) % N_SIG]) * 1.1); }
+    const y0 = li * lh, mid = y0 + lh * base, scale = lh * 0.46 / range;
+    sctx.save(); sctx.beginPath(); sctx.rect(0, y0, w, lh); sctx.clip();
+    sctx.strokeStyle = color; sctx.lineWidth = 1.3; sctx.lineJoin = 'round'; sctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const v = data[(sig.w - n + i + N_SIG) % N_SIG], x = w - (n - 1 - i) / WINDOW * w, y = mid - v * scale;
+      if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+    }
+    sctx.stroke(); sctx.restore();
+    sctx.fillStyle = color; sctx.fillText(name, 10, y0 + 5);
+    if (li) { sctx.strokeStyle = 'rgba(140,155,180,.18)'; sctx.beginPath(); sctx.moveTo(0, y0); sctx.lineTo(w, y0); sctx.stroke(); }
+  });
+}
+
+// dominant frequency of the unipolar electrogram (Hann-windowed DFT, 2-15 Hz)
+let df = 0, dfAt = 0;
+function updateDF(now) {
+  if (now - dfAt < 500) return; dfAt = now;
+  const n = Math.min(sig.count, 4096); if (n < 1500) { df = 0; return; }
+  let mean = 0; const x = new Float32Array(n);
+  for (let i = 0; i < n; i++) { x[i] = sig.uni[(sig.w - n + i + N_SIG) % N_SIG]; mean += x[i]; }
+  mean /= n; let power = 0;
+  for (let i = 0; i < n; i++) { x[i] = (x[i] - mean) * (0.5 - 0.5 * Math.cos(6.2832 * i / (n - 1))); power += x[i] * x[i]; }
+  if (power / n < 1e-5) { df = 0; return; }
+  let best = 0, bf = 0;
+  for (let f = 2; f <= 15; f += 0.2) {
+    let re = 0, im = 0; const w = 6.2832 * f / 1000;
+    for (let i = 0; i < n; i += 2) { re += x[i] * Math.cos(w * i); im += x[i] * Math.sin(w * i); }
+    const p = re * re + im * im; if (p > best) { best = p; bf = f; }
+  }
+  df = bf;
+}
+
+function showMeasure(m) {
+  const ok = m.cv > 0 && m.apd > 0;
+  $('s-cv').textContent = m.cv > 0 ? Math.round(m.cv * 100) + ' cm/s' : 'block';
+  $('s-apd').textContent = m.apd > 0 ? Math.round(m.apd) + ' ms' : '–';
+  $('s-wl').textContent = ok ? (m.wavelength / 10).toFixed(1) + ' cm' : '–';
+  $('wl-bar').style.width = (ok ? Math.min(100, m.wavelength / 200 * 100) : 0) + '%';
+  $('wl-mark').style.left = '75%';
+}
+
+// ---------- main loop ----------
+let lastFrame = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  frameDt = Math.min(now - lastFrame, 100); lastFrame = now;
+  if (mesh && !pending) {
+    owed = Math.min(owed + (running ? speed * frameDt / 1000 : 0) + stepExtra, 60); stepExtra = 0;
+    pending = true; send({ type: 'tick', ms: owed, mode }); owed -= Math.floor(owed);
+  } else if (running) owed = Math.min(owed + speed * frameDt / 1000, 60);
+  draw(); drawStrips(); updateDF(now);
+  $('hud').innerHTML = mesh
+    ? `Tissue time <b>${(simT / 1000).toFixed(2)} s</b> · running at <b>${Math.round(achieved / 5) * 5}</b> ms/s<br>Rotor cores <b>${ps.length}</b> · wavefronts <b>${waves}</b> · lesion points <b>${lesions}</b>`
+    : 'Building the atrium…';
+  $('read').innerHTML = `Catheter cycle length <b>${lastCL > 0 ? Math.round(lastCL) + ' ms' : '–'}</b> · dominant frequency <b>${df && lastCL > 0 && lastCL < 400 ? df.toFixed(1) + ' Hz' : '–'}</b>`;
+}
+
+// ---------- controls ----------
+const pct = v => Math.round(v * 100) + '%';
+const SLIDERS = { sinusCL: v => v + ' ms', remodel: pct, dispersion: pct, fibrosis: pct, naBlock: pct, kBlock: pct };
+const LOCAL = { speed: v => v + ' ms/s', ci: v => v + ' ms', bcl: v => v + ' ms', bn: v => v, brush: v => (+v).toFixed(1) + ' mm' };
+function syncControls() {
+  for (const k in SLIDERS) { $(k).value = params[k]; $('o-' + k).textContent = SLIDERS[k](+params[k]); }
+  $('sinusOn').checked = params.sinusOn; $('qrs').checked = params.qrs;
+}
+function setGroup(id, attr, val) { for (const b of $(id).children) b.classList.toggle('on', b.dataset[attr] === String(val)); }
+function setHint(text) { $('hint').textContent = text; }
+function setLegend() {
+  const g = ['linear-gradient(90deg,#4d3347,#ed611f,#ffed9e)', 'linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta,red)', 'linear-gradient(90deg,red,yellow,lime,cyan,blue,#a000ff)'][mode];
+  const t = ['Resting → depolarised', 'Phase of the action potential', 'Activated now → 240 ms ago'][mode];
+  $('legend').innerHTML = `${t}<i style="background:${g}"></i>`;
+}
+function bind() {
+  for (const k in SLIDERS) $(k).addEventListener('input', e => { params[k] = +e.target.value; $('o-' + k).textContent = SLIDERS[k](params[k]); cmd('params', { values: { [k]: params[k] } }); });
+  for (const k in LOCAL) { const f = () => { $('o-' + k).textContent = LOCAL[k]($(k).value); }; $(k).addEventListener('input', f); f(); }
+  $('speed').addEventListener('input', e => { speed = +e.target.value; });
+  for (const k of ['sinusOn', 'qrs']) $(k).addEventListener('change', e => cmd('params', { values: { [k]: e.target.checked } }));
+  $('scenarios').addEventListener('click', e => { const s = e.target.dataset.s; if (!s) return; cmd('preset', { name: s }); setGroup('scenarios', 's', s); setHint(HINTS[s]); sig.count = 0; running = true; $('play').textContent = 'Pause'; });
+  $('tabs').addEventListener('click', e => { const p = e.target.dataset.p; if (!p) return; setGroup('tabs', 'p', p); for (const el of document.querySelectorAll('.pane')) el.classList.toggle('on', el.id === 'p-' + p); });
+  $('tools').addEventListener('click', e => { const t = e.target.dataset.t; if (!t) return; tool = t; setGroup('tools', 't', t); setHint(TOOL_HINTS[t]); glc.style.cursor = t === 'rotate' ? 'grab' : 'crosshair'; });
+  $('modes').addEventListener('click', e => { if (e.target.dataset.m === undefined) return; mode = +e.target.dataset.m; setGroup('modes', 'm', mode); setLegend(); });
+  $('views').addEventListener('click', e => {
+    const v = { PA: [Math.PI, 0.17], AP: [0, 0.1], LAO: [0.79, 0.1], RAO: [-0.52, 0.1], LL: [1.57, 0.1], ROOF: [Math.PI, 1.45] }[e.target.dataset.v];
+    if (v) { cam.yaw = v[0]; cam.pitch = v[1]; }
+  });
+  $('play').addEventListener('click', () => { running = !running; $('play').textContent = running ? 'Pause' : 'Play'; });
+  $('step').addEventListener('click', () => { running = false; $('play').textContent = 'Play'; stepExtra = 10; });
+  $('rest').addEventListener('click', () => { cmd('rest'); sig.count = 0; });
+  $('pvc').addEventListener('click', () => cmd('premature', { pv, ci: +$('ci').value }));
+  $('burst').addEventListener('click', () => cmd('ectopy', { pv, count: +$('bn').value, cl: +$('bcl').value }));
+  $('reseed').addEventListener('click', () => cmd('reseed'));
+  $('lesions').addEventListener('click', e => { const l = e.target.dataset.l; if (l) { cmd('lesion', { name: l, gap: $('gap').checked }); $('gap').checked = false; } });
+  $('undo').addEventListener('click', () => cmd('undo'));
+  $('clear').addEventListener('click', () => cmd('clear'));
+  $('shock').addEventListener('click', () => cmd('shock'));
+  $('freq').addEventListener('change', () => { mesh = null; ps = []; catheter = null; send({ type: 'init', freq: +$('freq').value }); setGroup('scenarios', 's', ''); });
+  ['LSPV', 'LIPV', 'RSPV', 'RIPV'].forEach((name, i) => {
+    const b = document.createElement('button'); b.textContent = name; b.dataset.i = i; b.classList.toggle('on', i === 0);
+    b.addEventListener('click', () => { pv = i; setGroup('pvs', 'i', i); }); $('pvs').appendChild(b);
+  });
+
+  // pointer: drag rotates; a click (or an ablation drag) uses the current tool
+  let drag = null;
+  const at = e => { const r = glc.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  glc.addEventListener('pointerdown', e => {
+    glc.setPointerCapture(e.pointerId);
+    const [x, y] = at(e), hit = tool === 'rotate' ? null : pick(x, y);
+    drag = { x, y, moved: 0, paint: tool === 'ablate' && hit && !e.shiftKey };
+    if (drag.paint) cmd('ablateStroke', { p: hit.p, r: +$('brush').value / 2, fresh: true });
+  });
+  glc.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const [x, y] = at(e), dx = x - drag.x, dy = y - drag.y;
+    drag.moved += Math.abs(dx) + Math.abs(dy); drag.x = x; drag.y = y;
+    if (drag.paint) { const hit = pick(x, y); if (hit) cmd('ablateStroke', { p: hit.p, r: +$('brush').value / 2, fresh: false }); return; }
+    cam.yaw -= dx * 0.008; cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + dy * 0.008));
+  });
+  glc.addEventListener('pointerup', e => {
+    if (drag && !drag.paint && drag.moved < 5 && tool !== 'rotate') {
+      const hit = pick(drag.x, drag.y);
+      if (hit && tool === 'pace') cmd('pace', { p: hit.p });
+      if (hit && tool === 'catheter') cmd('catheter', { p: hit.p, n: hit.n });
+      if (hit && tool === 'rotor') cmd('rotor', { p: hit.p });
+    }
+    drag = null;
+  });
+  glc.addEventListener('pointercancel', () => { drag = null; });
+  glc.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.max(70, Math.min(320, cam.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+}
+
+// ---------- start ----------
+if (!gl) { $('hint').textContent = 'This page needs WebGL2, which this browser does not provide.'; return; }
+initGL(); bind();
+setGroup('tabs', 'p', 'rhythm'); $('p-rhythm').classList.add('on');
+setGroup('tools', 't', 'rotate'); setGroup('modes', 'm', 0); setLegend();
+const start = new URLSearchParams(location.search).get('scenario') || 'trigger';
+startHost();
+cmd('preset', { name: start }); setGroup('scenarios', 's', start); setHint(HINTS[start] || '');
+{ const warm = +new URLSearchParams(location.search).get('warm'); if (warm > 0) cmd('warm', { ms: Math.min(warm, 20000) }); }
+window.__af = { get state() { return { simT, ps: ps.length, waves, lesions, achieved, worker: !!worker, n: mesh && mesh.n, cl: lastCL, df }; }, cmd, cam, setMode: m => { mode = m; setGroup('modes', 'm', m); setLegend(); } };
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
